@@ -41,11 +41,26 @@ import Control.DeepSeq (deepseq)
 import GHCJS.DOM.EventM (preventDefault)
 import JavaScript.JQuery
 import GHCJS.DOM.JSFFI.Generated.Node
+import GHCJS.DOM.JSFFI.Generated.TreeWalker
 
-ENDPOINT :: [(String)]
-ENDPOINT = "api/quotations"
 
-quotations :: [(t, )]
+endpoint :: String
+endpoint = "api/quotations"
+
+{- quotations :: [quote]
+
+quote :: (text, author)
+
+text :: String
+
+author :: String -}
+
+data Quotations = Quotations {
+  text :: JSString
+  author :: JSString
+} deriving (Eq, Show, Read)
+
+
 
 main = do
 {-	if (navigator.serviceWorker.controller) {
@@ -60,6 +75,8 @@ main = do
   };
   navigator.serviceWorker.register('service-worker.js');
   -}
+
+  {- TENTATIVO DI CODING DELLA PARTE CHE INIZIA DALLA document.getElementById('add-form').onsubmit-}
   runWebGUI $ \webWiew -> do
   	getElementById doc "add-form" ^. onsubmit <- do
   		Just doc <- webViewGetDomDocument webView --prendo codice HTML
@@ -68,20 +85,20 @@ main = do
     	preventDefault
     	let value = jsg "value"
 
-    	newQuote <- getElementById doc "new-quote" ^.value ^. trim --non capisco il significato di .value e non riesco a capire come tradurlo in haskell
+    	newQuote <- getElementById doc "new-quote" ^. DeRefVal ^. trim --non capisco il significato di .value e non riesco a capire come tradurlo in haskell
     	{-Just newQuote <- fmap castToHTMLInputElement <$> getElementById doc "new-quote"-}
     	if null newQuote then return() else do
-    		quoteAuthor <- getElementById doc "quote-author" ^. value ^. trim
+    		quoteAuthor <- getElementById doc "quote-author" ^. DeRefVal ^. trim
     		{-Just quoteAuthor <- fmap castToHTMLInputElement <$> getElementById doc "quote-author"-}
     		if null quoteAuthor then quoteAuthor = "Anonymous" else do
-    			let quote = (newQuote, quoteAuthor) --non saprei come gestirla e che tipo assegnare a questa variabile. Dovrei definire il tipo quotations??
-    				headers = [("content-type", "application/json")]
+    			let quote = Quotations {text = newQuote, author = quoteAuthor} --non saprei come gestirla e che tipo assegnare a questa variabile. Dovrei definire il tipo quotations??
+    				  headers = [("content-type", "application/json")]
 
-
-    	callBack <- jsg "callbackToHaskell" <# fun (\f this[addedQuote] ->
+      {-PROVA DI UNA CALLBACK PRESENTE NELLA SERIE DI FUNZIONI NELL fetch. PRECISAMENTE L'ULTIMA CALLBACK IN ORDINE DI SCRITTURA-}
+    	callBack <- jsg "callbackToHaskell" <# fun (\f this[addedQuote] -> --devo inserire quote o addedQuote qui?
     		getElementById doc "quotations" ^.
     			getRowFor <- jsg "getRowFor"
-    			getRowFor ^. nodeAppendChild
+    			getRowFor ^. nodeAppendChild --non capisco perché si passa da una quote ad una addedQuote. Non è dichiarata da nessuna parte la variabile addedQuote
 
 			resizeIframe) --che tipo di variabile è addedQuote? Come gestisco le funzioni del tipo function(addedQuote){...}
     					  --questa parte del codice corrisponde a ciò che c'è nella fetch in function(addedQuote){...}
@@ -91,10 +108,41 @@ main = do
     	--Come gestisco la fetch di serviceWorkerWare??????? Come potrei implementarla in haskell. Inoltre la fetch prende in ingresso un ENDPOINT e una funzione e in un altro caso solo l'ENDPOINT
     	--non mi sono ancora chiare bene le js1, js4 e jsg. Cosa fanno, come agiscono? A prima vista mi sembra prendano una stringa in ingresso e la traducano in funzione javascript. Sarebbe un qualcosa di troppo magico se fosse vero
     	--dato che ghcjs crea un html tutto suo, devo assegnare prima tutto l'html prima di iniziare con la definizione del codice??
+  }
+
+{-TENTATIVO DI CODING DELLA function getCell(text)-}
+getCell :: Text -> IO(Maybe Element) --Non penso sia corretto il tipo Text. Bisogna capire come definire le variabili quotations e quote. Perché penso che nei codici java faccia parte del ServiceWorker
+getCell v  = do
+    document <- jsg "document"
+    createElement <- js1 "createElement"
+    td <- createElement "TD"
+    td ^. getTextContent <- v
+    return(td)
+
+{-TENTATIVO DI CODING DELLA function getDeleteButton(id)-}
+getDeleteButton :: elementId -> IO (Maybe Element)
+getDeleteButton iden = do
+      document <- jsg "document"
+      createElement <- js1 "createElement"
+      td <- document ^. createElement "TD"
+      bt <- document ^. createElement "BUTTON"
+      bt ^. getTextContent <- "Delete"
+
+      callBack <- jsg "callbackToHaskell" <# fun (\f this -> do --come si gestiscono più callback in fila??
+                document <- jsg "document"
+                getElementById <- js1 "getElementById"
+                tr <- document ^. getElementById
+                tr ^. getParentNode ^. removeChild tr)
 
 
-    	getCell :: Text -> IO(Maybe Element)
-    	getCell v  = do
-    		td <- createElement doc "TD"
-    		td ^. getTextContent <- v
+
+
+
+
+
+
+
+
+
+
 
