@@ -16,7 +16,7 @@ getDeleteButton iden = do
       createElement <- js1 "createElement"
       td <- document ^. createElement "TD"
       bt <- document ^. createElement "BUTTON"
-      let bt ^. getTextContent = "Delete"
+      setTextContent bt Just "Delete"
 
       void $
         on bt click $ do
