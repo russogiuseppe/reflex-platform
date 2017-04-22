@@ -1,3 +1,14 @@
+module Getdeletebutton where
+
+import GHCJS.DOM.Element
+import GHCJS.DOM.Document
+import GHCJS.DOM.EventM
+import GHCJS.DOM.HTMLFormElement
+import Prelude hiding ((!!))
+import GHCJS.DOM
+import Language.Javascript.JSaddle
+
+
 getDeleteButton :: String -> IO (Maybe Element)
 getDeleteButton iden = do
       document <- jsg "document"
@@ -8,7 +19,7 @@ getDeleteButton iden = do
 
       void $
         Ev.on bt E.click $ do
-          deleteQuote iden
+          deleteQuote iden --da definire in un altro modulo
           tr <- document ^. getElementById iden
           tr ^. getParentNode ^. removeChild tr
       return()
