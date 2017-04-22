@@ -7,6 +7,7 @@ import GHCJS.DOM.HTMLFormElement
 import Prelude hiding ((!!))
 import GHCJS.DOM
 import Language.Javascript.JSaddle
+import GHCJS.DOM.JSFFI.Generated.Node
 
 
 getDeleteButton :: String -> IO (Maybe Element)
