@@ -18,7 +18,7 @@ getDeleteButton iden = do
       let bt ^. getTextContent = "Delete"
 
       void $
-        Ev.on bt E.click $ do
+        on bt click $ do
           deleteQuote iden --da definire in un altro modulo
           tr <- document ^. getElementById iden
           tr ^. getParentNode ^. removeChild tr
