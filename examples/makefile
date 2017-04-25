@@ -1,5 +1,5 @@
 
-compile: provaGhcjs_vz.hs
+compile: managingTable.hs
 	ghcjs $<
 
 run:

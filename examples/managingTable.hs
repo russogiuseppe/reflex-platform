@@ -14,6 +14,7 @@ import Control.Monad.Trans.State.Lazy
 import Data.Char
 import Control.Monad
 import qualified GHCJS.DOM as R
+import qualified GHCJS.DOM.Types as T
 import qualified GHCJS.DOM.Document as D
 import qualified GHCJS.DOM.Element as E
 import qualified GHCJS.DOM.EventM as Ev
@@ -21,61 +22,50 @@ import qualified GHCJS.DOM.HTMLFormElement as FE
 import Prelude hiding ((!!))
 import qualified GHCJS.DOM.HTMLInputElement as IE 
 import qualified GHCJS.DOM.HTMLTableElement as TE 
-import qualified GHCJS.DOM.JSFFI.Generated.Node as NE 
+import qualified GHCJS.DOM.Node as NE
 
-{-endpoint :: String
-endpoint = "api/quotations"-}
-
-{-data Quote = Quote
-  { text :: String
-  , author :: String
-  } deriving (Eq, Show, Read) -}
-type StateType = Int
-type StateMonad a = StateT StateType IO a
-
-increment :: StateMonad()
-increment = do{
-          modify(+1);
-          return();
-        }
-
-rif :: Int
-rif = 1
+data Quote = Quote { quoteText :: String , quoteAuthor :: String} deriving (Eq, Show, Read)
 
 
 main :: IO ()
 main =
   let gGetById f d i = fmap f <$> D.getElementById d i
-      cCreateById m n o = fmap m <$> D.createElement n o  
+
+      uGetById d i = do
+        Just e <- D.getElementById d i
+        return e
+
+      getTextValueWithId d i = do
+        Just t <- gGetById IE.castToHTMLInputElement d i
+        (t' :: Maybe String) <- IE.getValue t
+        case t' of
+          Just t'' -> return t''
+          Nothing -> error "Invalid id specified"
+
+      getQuoteFromPage d = do
+        newQuote <- getTextValueWithId d "new-quote"
+        author <- getTextValueWithId d "quote-author"
+        return $ Quote newQuote author
+
+      createRowFromQuote d q = do
+        Just e <- D.createElement d (Just "tr")
+        E.setInnerHTML e $ Just $ "<td>" ++ quoteText q ++ "</td><td>" ++ quoteAuthor q ++ "</td>"
+        return e
+
+      addRowToTable d r = do
+        qt <- uGetById d "quotations"
+        _ <- NE.appendChild qt (Just r)
+        return ()
+
+
   in R.runWebGUI $ \webView -> do
-       Just doc <- R.webViewGetDomDocument webView
-       Just myForm <- gGetById FE.castToHTMLFormElement doc "add-form"
-       -- ora che abbiamo il riferimento a myForm, registriamo l'handler del pulsante
-       void $
+      Just doc <- R.webViewGetDomDocument webView
+      Just myForm <- gGetById FE.castToHTMLFormElement doc "add-form"
+      void $
          Ev.on myForm E.submit $
-         -- Stampiamo nella console del browser il seguente messaggio
           do
             Ev.preventDefault
-
-            Just newQuote <- gGetById IE.castToHTMLInputElement doc "new-quote"
-            quote <- IE.getValue newQuote
-            Just quoteAuthor <- gGetById IE.castToHTMLInputElement doc "quote-author"
-            author <- IE.getValue newQuote
-
-            --dopo aver preso i riferimenti e le stringhe dei valori inseriti dall'utente, creo le due celle con le stringhe
-            Just td1 <- cCreateById NE.castToNode doc "TD"
-            setTextContent td1 quote 
-            Just td2 <- cCreateById NE.castToNode doc "TD"
-            setTextContent td2 ("by" ++ author)
-
-            --creiamo l'elemento tr e ad esso leghiamo i due elementi td
-            Just tr <- cCreateById NE.castToNode doc "TR"
-            E.setId tr (\rif -> show rif)
-            runStateT increment rif
-            NE.appendChild tr td1
-            NE.appendChild tr td2
-
-            --aggiungiamo il nodo tr a tabella
-            Just quotations <- gGetById TE.castToHTMLTableElement doc "quotations"
-            NE.appendChild quotations tr 
-       return ()
+            q <- getQuoteFromPage doc
+            r <- createRowFromQuote doc q
+            addRowToTable doc r
+      return ()
