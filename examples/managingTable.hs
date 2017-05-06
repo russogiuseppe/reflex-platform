@@ -1,71 +1,100 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE DeriveAnyClass            #-}
+{-# LANGUAGE DeriveGeneric             #-}
+{-# LANGUAGE FlexibleContexts          #-}
+{-# LANGUAGE JavaScriptFFI             #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ScopedTypeVariables       #-}
 
 module Main where
 
-import Control.Monad
-import Control.Monad.IO.Class
+import           Control.Monad
+import           Control.Monad.IO.Class
+
+import           Control.Monad
 
 -- For an up to date list of what ghcjs-dom can do, download and grok:
 -- https://hackage.haskell.org/package/ghcjs-dom-0.2.3.1/ghcjs-dom-0.2.3.1.tar.gz
-import Control.Monad.Trans.Class
-import Control.Monad.Trans.State.Lazy
-import Data.Char
-import Control.Monad
-import qualified GHCJS.DOM as R
-import qualified GHCJS.DOM.Types as T
-import qualified GHCJS.DOM.Document as D
-import qualified GHCJS.DOM.Element as E
-import qualified GHCJS.DOM.EventM as Ev
-import qualified GHCJS.DOM.HTMLFormElement as FE
-import Prelude hiding ((!!))
-import qualified GHCJS.DOM.HTMLInputElement as IE 
-import qualified GHCJS.DOM.HTMLTableElement as TE 
-import qualified GHCJS.DOM.Node as NE
+import           Control.Monad.Trans.Class
+import           Control.Monad.Trans.State.Lazy
+import           Data.Char
+import           Data.JSString                  as DJS
+import           GHC.Generics
+import qualified GHCJS.DOM                      as R
+import qualified GHCJS.DOM.Document             as D
+import qualified GHCJS.DOM.Element              as E
+import qualified GHCJS.DOM.EventM               as Ev
+import qualified GHCJS.DOM.HTMLFormElement      as FE
+import qualified GHCJS.DOM.HTMLInputElement     as IE
+import qualified GHCJS.DOM.HTMLTableElement     as TE
+import qualified GHCJS.DOM.Node                 as NE
+import qualified GHCJS.DOM.Types                as T
+import qualified GHCJS.Marshal.Internal         as GMI
+import qualified GHCJS.Types                    as TS
+import           Prelude                        hiding ((!!))
 
-data Quote = Quote { quoteText :: String , quoteAuthor :: String} deriving (Eq, Show, Read)
+-- Vogliamo convertire Quote automaticamente da/a un JSVal. Per far questo
+-- usiamo "deriving ... GMI.ToJSVal, FMI.FromJSVal"
+data Quote = Quote
+  { quoteText   :: String
+  , quoteAuthor :: String
+  } deriving (Eq, Show, Read, Generic, GMI.ToJSVal, GMI.FromJSVal)
 
+-- Funzioni ausiliarie per leggere e scrivere un valore globale nel browser
+foreign import javascript unsafe "window[$1] = $2" writeGlobal ::
+               TS.JSString -> TS.JSVal -> IO ()
 
+foreign import javascript unsafe "$r = window[$1]" readGlobal ::
+               TS.JSString -> IO TS.JSVal
+
+-- Queste due funzioni ci permettono di scrivere e leggere una quote in una
+-- variabile globale 'exampleQuote'
+writeQuote :: Quote -> IO ()
+writeQuote q = do
+  valueToWrite <- GMI.toJSVal q
+  writeGlobal (DJS.pack "exampleQuote") valueToWrite
+
+readQuote :: IO Quote
+readQuote = do
+  valueRead <- readGlobal (DJS.pack "exampleQuote")
+  (Just (q :: Quote)) <- GMI.fromJSVal valueRead
+  return q
+
+-- Modifichiamo il main in modo che quando l'utente clicca 'Add' salviamo la
+-- quote in 'exampleQuote'
 main :: IO ()
 main =
   let gGetById f d i = fmap f <$> D.getElementById d i
-
       uGetById d i = do
         Just e <- D.getElementById d i
         return e
-
       getTextValueWithId d i = do
         Just t <- gGetById IE.castToHTMLInputElement d i
         (t' :: Maybe String) <- IE.getValue t
         case t' of
           Just t'' -> return t''
-          Nothing -> error "Invalid id specified"
-
+          Nothing  -> error "Invalid id specified"
       getQuoteFromPage d = do
         newQuote <- getTextValueWithId d "new-quote"
         author <- getTextValueWithId d "quote-author"
         return $ Quote newQuote author
-
       createRowFromQuote d q = do
         Just e <- D.createElement d (Just "tr")
-        E.setInnerHTML e $ Just $ "<td>" ++ quoteText q ++ "</td><td>" ++ quoteAuthor q ++ "</td>"
+        E.setInnerHTML e $
+          Just $
+          "<td>" ++ quoteText q ++ "</td><td>" ++ quoteAuthor q ++ "</td>"
         return e
-
       addRowToTable d r = do
         qt <- uGetById d "quotations"
         _ <- NE.appendChild qt (Just r)
         return ()
-
-
   in R.runWebGUI $ \webView -> do
-      Just doc <- R.webViewGetDomDocument webView
-      Just myForm <- gGetById FE.castToHTMLFormElement doc "add-form"
-      void $
-         Ev.on myForm E.submit $
-          do
-            Ev.preventDefault
-            q <- getQuoteFromPage doc
-            r <- createRowFromQuote doc q
-            addRowToTable doc r
-      return ()
+       Just doc <- R.webViewGetDomDocument webView
+       Just myForm <- gGetById FE.castToHTMLFormElement doc "add-form"
+       void $
+         Ev.on myForm E.submit $ do
+           Ev.preventDefault
+           q <- getQuoteFromPage doc
+           liftIO $ writeQuote q
+           r <- createRowFromQuote doc q
+           addRowToTable doc r
+       return ()
