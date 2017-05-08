@@ -39,6 +39,11 @@ data Quote = Quote
   , quoteAuthor :: String
   } deriving (Eq, Show, Read, Generic, GMI.ToJSVal, GMI.FromJSVal)
 
+
+{-addQuote :: JSVal -> [JSVal] -> IO ()
+addQuote q list = do 
+	return(list ++ [q]) -}
+
 -- Funzioni ausiliarie per leggere e scrivere un valore globale nel browser
 foreign import javascript unsafe "window[$1] = $2" writeGlobal ::
                TS.JSString -> TS.JSVal -> IO ()
@@ -58,6 +63,17 @@ readQuote = do
   valueRead <- readGlobal (DJS.pack "exampleQuote")
   (Just (q :: Quote)) <- GMI.fromJSVal valueRead
   return q
+
+readQuoteArray :: IO [Quote]
+readQuoteArray = do
+  valueRead <- readGlobal (DJS.pack "arrayQuote")
+  (Just (q :: [Quote])) <- GMI.fromJSVal valueRead
+  return q
+
+writeQuoteArray :: [Quote] -> IO ()
+writeQuoteArray q = do
+	arrayQuote <- GMI.toJSVal q 
+	writeGlobal (DJS.pack "arrayQuote") arrayQuote
 
 -- Modifichiamo il main in modo che quando l'utente clicca 'Add' salviamo la
 -- quote in 'exampleQuote'
@@ -87,14 +103,16 @@ main =
         qt <- uGetById d "quotations"
         _ <- NE.appendChild qt (Just r)
         return ()
-  in R.runWebGUI $ \webView -> do
+  in R.runWebGUI $ \webView -> do 		
        Just doc <- R.webViewGetDomDocument webView
        Just myForm <- gGetById FE.castToHTMLFormElement doc "add-form"
+       writeQuoteArray []
        void $
          Ev.on myForm E.submit $ do
            Ev.preventDefault
            q <- getQuoteFromPage doc
-           liftIO $ writeQuote q
+           qa <- liftIO readQuoteArray
+           liftIO $ writeQuoteArray (qa ++ [q])
            r <- createRowFromQuote doc q
            addRowToTable doc r
        return ()
