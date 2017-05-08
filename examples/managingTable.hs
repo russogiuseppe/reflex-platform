@@ -30,6 +30,8 @@ import qualified GHCJS.DOM.Node                 as NE
 import qualified GHCJS.DOM.Types                as T
 import qualified GHCJS.Marshal.Internal         as GMI
 import qualified GHCJS.Types                    as TS
+import qualified GHCJS.DOM.HTMLButtonElement  as BE
+import GHCJS.Foreign.Callback
 import           Prelude                        hiding ((!!))
 
 -- Vogliamo convertire Quote automaticamente da/a un JSVal. Per far questo
@@ -39,17 +41,16 @@ data Quote = Quote
   , quoteAuthor :: String
   } deriving (Eq, Show, Read, Generic, GMI.ToJSVal, GMI.FromJSVal)
 
-
-{-addQuote :: JSVal -> [JSVal] -> IO ()
-addQuote q list = do 
-	return(list ++ [q]) -}
-
 -- Funzioni ausiliarie per leggere e scrivere un valore globale nel browser
 foreign import javascript unsafe "window[$1] = $2" writeGlobal ::
                TS.JSString -> TS.JSVal -> IO ()
 
 foreign import javascript unsafe "$r = window[$1]" readGlobal ::
                TS.JSString -> IO TS.JSVal
+
+foreign import javascript unsafe
+  "require('fs').stat($1)"
+  writeGlobalFunction :: TS.JSString -> Callback (TS.JSVal -> IO ()) -> IO ()
 
 -- Queste due funzioni ci permettono di scrivere e leggere una quote in una
 -- variabile globale 'exampleQuote'
@@ -72,8 +73,8 @@ readQuoteArray = do
 
 writeQuoteArray :: [Quote] -> IO ()
 writeQuoteArray q = do
-	arrayQuote <- GMI.toJSVal q 
-	writeGlobal (DJS.pack "arrayQuote") arrayQuote
+  arrayQuote <- GMI.toJSVal q 
+  writeGlobal (DJS.pack "arrayQuote") arrayQuote
 
 -- Modifichiamo il main in modo che quando l'utente clicca 'Add' salviamo la
 -- quote in 'exampleQuote'
@@ -83,36 +84,43 @@ main =
       uGetById d i = do
         Just e <- D.getElementById d i
         return e
+
       getTextValueWithId d i = do
         Just t <- gGetById IE.castToHTMLInputElement d i
         (t' :: Maybe String) <- IE.getValue t
         case t' of
           Just t'' -> return t''
           Nothing  -> error "Invalid id specified"
+
       getQuoteFromPage d = do
         newQuote <- getTextValueWithId d "new-quote"
         author <- getTextValueWithId d "quote-author"
         return $ Quote newQuote author
+
       createRowFromQuote d q = do
         Just e <- D.createElement d (Just "tr")
+        --Just button <- fmap BE.castToHTMLButtonElement <$> D.createElement d (Just "button")
+        --BE.setName button "Delete"
         E.setInnerHTML e $
           Just $
-          "<td>" ++ quoteText q ++ "</td><td>" ++ quoteAuthor q ++ "</td>"
+          "<td>" ++ quoteText q ++ "</td><td>" ++ quoteAuthor q ++ "</td><td><button>" ++ "Delete" ++ "</button></td>"
         return e
+
       addRowToTable d r = do
         qt <- uGetById d "quotations"
         _ <- NE.appendChild qt (Just r)
         return ()
-  in R.runWebGUI $ \webView -> do 		
+
+  in R.runWebGUI $ \webView -> do     
        Just doc <- R.webViewGetDomDocument webView
        Just myForm <- gGetById FE.castToHTMLFormElement doc "add-form"
        writeQuoteArray []
        void $
          Ev.on myForm E.submit $ do
-           Ev.preventDefault
-           q <- getQuoteFromPage doc
-           qa <- liftIO readQuoteArray
-           liftIO $ writeQuoteArray (qa ++ [q])
-           r <- createRowFromQuote doc q
-           addRowToTable doc r
+          Ev.preventDefault
+          q <- getQuoteFromPage doc
+          qa <- liftIO readQuoteArray
+          liftIO $ writeQuoteArray (qa ++ [q])
+          r <- createRowFromQuote doc q
+          addRowToTable doc r
        return ()
