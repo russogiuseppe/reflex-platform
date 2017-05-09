@@ -112,6 +112,8 @@ main =
 
       createRowFromQuote d q = do
         Just e <- D.createElement d (Just "tr")
+        idNum <- liftIO $ readID
+        E.setId e (show idNum)
         E.setInnerHTML e $
           Just $
           "<td>" ++ quoteText q ++ "</td><td>" ++ quoteAuthor q ++ "</td>"-- <td><button> ++ "Delete" ++ </button></td>"
@@ -123,14 +125,22 @@ main =
         return ()
 
       createButton d = do
-          Just button <- fmap BE.castToHTMLButtonElement <$> D.createElement d (Just "button")
-          --Ev.on button E.click $ do (Si dovrebbe fare così? Posso registrare un evento per ogni bottone creato?)
-          idNum <- liftIO readID 
-          E.setId button (show idNum)
-          liftIO $ writeID (idNum + 1)
-          NE.setTextContent button (Just "Delete")
-          return button
+        Just button <- fmap BE.castToHTMLButtonElement <$> D.createElement d (Just "button")
+        --Ev.on button E.click $ do (Si dovrebbe fare così? Posso registrare un evento per ogni bottone creato?)
+        idNum <- liftIO readID 
+        E.setId button (show (idNum * 3019))
+        liftIO $ writeID (idNum + 1)         
+        NE.setTextContent button (Just "Delete")
+        return button
 
+      addEventOnButton d b =
+        void $
+          Ev.on b E.click $ do
+            idNum <- E.getId b
+            elemDel <- uGetById d (show((read idNum)/3019))
+            qt <- uGetById d "quotations"
+            NE.removeChild qt (Just elemDel)
+            return() 
 
   in R.runWebGUI $ \webView -> do     
        Just doc <- R.webViewGetDomDocument webView
@@ -146,6 +156,7 @@ main =
           r <- createRowFromQuote doc q
           --creo il tasto "Delete" e salvo all'interno il delete. Non riesco a capire come poter registrare l'onClick
           button <- createButton doc 
-          NE.appendChild r (Just button)
+          NE.appendChild r (Just button) 
           addRowToTable doc r
+          addEventOnButton doc button
        return ()
