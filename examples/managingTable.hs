@@ -52,8 +52,8 @@ foreign import javascript unsafe
   "require('fs').stat($1)"
   writeGlobalFunction :: TS.JSString -> Callback (TS.JSVal -> IO ()) -> IO ()
 
--- Queste due funzioni ci permettono di scrivere e leggere una quote in una
--- variabile globale 'exampleQuote'
+-- Queste due funzioni ci permettono di scrivere e leggere una variabile Haskell in una
+-- variabile globale javascript
 writeID :: Int -> IO ()
 writeID num = do
   idToSave <- GMI.toJSVal num
@@ -87,8 +87,7 @@ writeQuoteArray q = do
   arrayQuote <- GMI.toJSVal q 
   writeGlobal (DJS.pack "arrayQuote") arrayQuote
 
--- Modifichiamo il main in modo che quando l'utente clicca 'Add' salviamo la
--- quote in 'exampleQuote'
+
 main :: IO ()
 main =
   let gGetById f d i = fmap f <$> D.getElementById d i
@@ -113,11 +112,6 @@ main =
 
       createRowFromQuote d q = do
         Just e <- D.createElement d (Just "tr")
-        --Just button <- fmap BE.castToHTMLButtonElement <$> D.createElement d (Just "button")
-        --BE.setName button "Delete"
-        --idNum <- liftIO readID 
-        --E.setId e (show idNum)
-        --liftIO $ writeID (idNum + 1)
         E.setInnerHTML e $
           Just $
           "<td>" ++ quoteText q ++ "</td><td>" ++ quoteAuthor q ++ "</td>"-- <td><button> ++ "Delete" ++ </button></td>"
@@ -130,7 +124,7 @@ main =
 
       createButton d = do
           Just button <- fmap BE.castToHTMLButtonElement <$> D.createElement d (Just "button")
-          --Ev.on button E.click $ do (Si dovrebbe fare così?)
+          --Ev.on button E.click $ do (Si dovrebbe fare così? Posso registrare un evento per ogni bottone creato?)
           idNum <- liftIO readID 
           E.setId button (show idNum)
           liftIO $ writeID (idNum + 1)
@@ -154,9 +148,4 @@ main =
           button <- createButton doc 
           NE.appendChild r (Just button)
           addRowToTable doc r
-          --Just button <- gGetByTagName BE.castToHTMLButtonElement doc "button"
-          --void $
-          --  Ev.on button E.click $ do 
-          --    qt <- uGetById doc "quotations"
-          --    _ <- NE.removeChild qt (Just r)
        return ()
