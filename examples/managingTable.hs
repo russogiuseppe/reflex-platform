@@ -30,7 +30,7 @@ import qualified GHCJS.DOM.Node                 as NE
 import qualified GHCJS.DOM.Types                as T
 import qualified GHCJS.Marshal.Internal         as GMI
 import qualified GHCJS.Types                    as TS
-import qualified GHCJS.DOM.HTMLButtonElement  as BE
+import qualified GHCJS.DOM.HTMLButtonElement    as BE
 import GHCJS.Foreign.Callback
 import           Prelude                        hiding ((!!))
 
@@ -54,6 +54,17 @@ foreign import javascript unsafe
 
 -- Queste due funzioni ci permettono di scrivere e leggere una quote in una
 -- variabile globale 'exampleQuote'
+writeID :: Int -> IO ()
+writeID num = do
+  idToSave <- GMI.toJSVal num
+  writeGlobal (DJS.pack "idQuote") idToSave
+
+readID :: IO Int
+readID = do 
+  idNum <- readGlobal (DJS.pack "idQuote")
+  (Just (idToSave :: Int)) <- GMI.fromJSVal idNum
+  return idToSave
+
 writeQuote :: Quote -> IO ()
 writeQuote q = do
   valueToWrite <- GMI.toJSVal q
@@ -81,9 +92,12 @@ writeQuoteArray q = do
 main :: IO ()
 main =
   let gGetById f d i = fmap f <$> D.getElementById d i
+      
       uGetById d i = do
         Just e <- D.getElementById d i
         return e
+
+      gGetByTagName f d i = fmap f <$> E.getElementsByTagName d i
 
       getTextValueWithId d i = do
         Just t <- gGetById IE.castToHTMLInputElement d i
@@ -101,9 +115,12 @@ main =
         Just e <- D.createElement d (Just "tr")
         --Just button <- fmap BE.castToHTMLButtonElement <$> D.createElement d (Just "button")
         --BE.setName button "Delete"
+        --idNum <- liftIO readID 
+        --E.setId e (show idNum)
+        --liftIO $ writeID (idNum + 1)
         E.setInnerHTML e $
           Just $
-          "<td>" ++ quoteText q ++ "</td><td>" ++ quoteAuthor q ++ "</td><td><button>" ++ "Delete" ++ "</button></td>"
+          "<td>" ++ quoteText q ++ "</td><td>" ++ quoteAuthor q ++ "</td>"-- <td><button> ++ "Delete" ++ </button></td>"
         return e
 
       addRowToTable d r = do
@@ -111,10 +128,21 @@ main =
         _ <- NE.appendChild qt (Just r)
         return ()
 
+      createButton d = do
+          Just button <- fmap BE.castToHTMLButtonElement <$> D.createElement d (Just "button")
+          --Ev.on button E.click $ do (Si dovrebbe fare così?)
+          idNum <- liftIO readID 
+          E.setId button (show idNum)
+          liftIO $ writeID (idNum + 1)
+          NE.setTextContent button (Just "Delete")
+          return button
+
+
   in R.runWebGUI $ \webView -> do     
        Just doc <- R.webViewGetDomDocument webView
        Just myForm <- gGetById FE.castToHTMLFormElement doc "add-form"
        writeQuoteArray []
+       writeID 1
        void $
          Ev.on myForm E.submit $ do
           Ev.preventDefault
@@ -122,5 +150,13 @@ main =
           qa <- liftIO readQuoteArray
           liftIO $ writeQuoteArray (qa ++ [q])
           r <- createRowFromQuote doc q
+          --creo il tasto "Delete" e salvo all'interno il delete. Non riesco a capire come poter registrare l'onClick
+          button <- createButton doc 
+          NE.appendChild r (Just button)
           addRowToTable doc r
+          --Just button <- gGetByTagName BE.castToHTMLButtonElement doc "button"
+          --void $
+          --  Ev.on button E.click $ do 
+          --    qt <- uGetById doc "quotations"
+          --    _ <- NE.removeChild qt (Just r)
        return ()
