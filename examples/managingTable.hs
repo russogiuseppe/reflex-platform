@@ -48,8 +48,7 @@ foreign import javascript unsafe "window[$1] = $2" writeGlobal ::
 foreign import javascript unsafe "$r = window[$1]" readGlobal ::
                TS.JSString -> IO TS.JSVal
 
-foreign import javascript unsafe
-  "require('fs').stat($1)"
+foreign import javascript unsafe "require('fs').stat($1)"
   writeGlobalFunction :: TS.JSString -> Callback (TS.JSVal -> IO ()) -> IO ()
 
 -- Queste due funzioni ci permettono di scrivere e leggere una variabile Haskell in una
@@ -114,9 +113,10 @@ main =
         Just e <- D.createElement d (Just "tr")
         idNum <- liftIO $ readID
         E.setId e (show idNum)
+	listIO$ writeID idNum +1 
         E.setInnerHTML e $
-          Just $
-          "<td>" ++ quoteText q ++ "</td><td>" ++ quoteAuthor q ++ "</td>"-- <td><button> ++ "Delete" ++ </button></td>"
+          Just $ 
+        "<td>" ++ quoteText q ++ "</td><td>" ++ quoteAuthor q ++ "</td><button onClick=" ++ "myHandler(id)" ++ ">" ++ "Delete" ++ "</button>"
         return e
 
       addRowToTable d r = do
@@ -124,29 +124,14 @@ main =
         _ <- NE.appendChild qt (Just r)
         return ()
 
-      createButton d = do
-        Just button <- fmap BE.castToHTMLButtonElement <$> D.createElement d (Just "button")
-        --Ev.on button E.click $ do (Si dovrebbe fare così? Posso registrare un evento per ogni bottone creato?)
-        idNum <- liftIO readID 
-        E.setId button (show (idNum * 3019))
-        liftIO $ writeID (idNum + 1)         
-        NE.setTextContent button (Just "Delete")
-        return button
+    -- si dovrebbe scrivere l'handler che deve riuscire a chiamare la funzione di haskell
+	-- per riuscirci dobbiamo capire per bene come funziona la questione della call back
 
-      addEventOnButton d b =
-        void $
-          Ev.on b E.click $ do
-            idNum <- E.getId b
-            elemDel <- uGetById d (show((read idNum)/3019))
-            qt <- uGetById d "quotations"
-            NE.removeChild qt (Just elemDel)
-            return() 
 
   in R.runWebGUI $ \webView -> do     
        Just doc <- R.webViewGetDomDocument webView
        Just myForm <- gGetById FE.castToHTMLFormElement doc "add-form"
        writeQuoteArray []
-       writeID 1
        void $
          Ev.on myForm E.submit $ do
           Ev.preventDefault
@@ -154,9 +139,5 @@ main =
           qa <- liftIO readQuoteArray
           liftIO $ writeQuoteArray (qa ++ [q])
           r <- createRowFromQuote doc q
-          --creo il tasto "Delete" e salvo all'interno il delete. Non riesco a capire come poter registrare l'onClick
-          button <- createButton doc 
-          NE.appendChild r (Just button) 
           addRowToTable doc r
-          addEventOnButton doc button
        return ()
