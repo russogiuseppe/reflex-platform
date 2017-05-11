@@ -76,16 +76,19 @@ readQuote = do
   (Just (q :: Quote)) <- GMI.fromJSVal valueRead
   return q
 
-readQuoteArray :: IO [Quote]
+readQuoteArray :: IO [(String, Quote)]
 readQuoteArray = do
   valueRead <- readGlobal (DJS.pack "arrayQuote")
-  (Just (q :: [Quote])) <- GMI.fromJSVal valueRead
+  (Just (q :: [(String, Quote)])) <- GMI.fromJSVal valueRead
   return q
 
-writeQuoteArray :: [Quote] -> IO ()
+writeQuoteArray :: [(String, Quote)] -> IO ()
 writeQuoteArray q = do
   arrayQuote <- GMI.toJSVal q
   writeGlobal (DJS.pack "arrayQuote") arrayQuote
+
+deleteQuoteArray :: [(String, Quote)] -> String -> [(String, Quote)]
+deleteQuoteArray xs el = [x | x <- xs, not (fst x == el)]
 
 main :: IO ()
 main =
@@ -107,40 +110,44 @@ main =
       createRowFromQuote d q = do
         Just e <- D.createElement d (Just "tr")
         idNum <- liftIO readID
-        E.setId e ("row" ++ (show idNum))
+        E.setId e ("row" ++ show idNum)
         --liftIO $ writeID $ idNum + 1
         E.setInnerHTML e $
           Just $
           "<td>" ++
           quoteText q ++
           "</td><td>" ++
-          quoteAuthor q ++
+          "by " ++ quoteAuthor q ++
           "</td><button onClick=" ++ "myHandler" ++ "(" ++ show idNum ++ ")" ++ ">Delete</button>"
         return e
       addRowToTable d r = do
         qt <- uGetById d "quotations"
         _ <- NE.appendChild qt (Just r)
         return ()
+      setFunction idNum doc = do 
+        (Just (idn :: Int)) <- GMI.fromJSVal idNum
+        qut <- uGetById doc ("row" ++ show idn) 
+        quotations <- liftIO readQuoteArray
+        liftIO $ writeQuoteArray (deleteQuoteArray quotations (show idn))
+        Just table <- NE.getParentNode qut 
+        NE.removeChild table (Just qut) 
+        return() 
     -- si dovrebbe scrivere l'handler che deve riuscire a chiamare la funzione di haskell
     -- per riuscirci dobbiamo capire per bene come funziona la questione della call back
   in R.runWebGUI $ \webView -> do
        Just doc <- R.webViewGetDomDocument webView
        Just myForm <- gGetById FE.castToHTMLFormElement doc "add-form"
        writeQuoteArray []
-       deleteQuote <- asyncCallback1 $ \idNum -> do { (Just (idn :: Int)) <- GMI.fromJSVal idNum;
-                                                      qut <- uGetById doc ("row" ++ show idn); 
-                                                      Just table <- NE.getParentNode qut; 
-                                                      NE.removeChild table (Just qut); 
-                                                      return() }
+       deleteQuote <- asyncCallback1 $ \idNum -> setFunction idNum doc
        writeGlobalFunction (DJS.pack "myHandler") deleteQuote
        void $
          Ev.on myForm E.submit $ do
            Ev.preventDefault
            q <- getQuoteFromPage doc
            qa <- liftIO readQuoteArray
-           liftIO $ writeQuoteArray (qa ++ [q])
-           r <- createRowFromQuote doc q
            idNum <- liftIO readID
+           liftIO $ writeQuoteArray (qa ++ [(show idNum, q)])
+           r <- createRowFromQuote doc q
            liftIO $ writeID (idNum + 1)
            addRowToTable doc r
        return ()

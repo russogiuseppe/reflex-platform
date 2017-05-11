@@ -1,5 +1,5 @@
 
-compile: managingTable.hs
+compile: index.hs
 	ghcjs $<
 
 run:
