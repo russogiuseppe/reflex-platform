@@ -23,15 +23,15 @@ import qualified GHCJS.DOM                      as R
 import qualified GHCJS.DOM.Document             as D
 import qualified GHCJS.DOM.Element              as E
 import qualified GHCJS.DOM.EventM               as Ev
+import qualified GHCJS.DOM.HTMLButtonElement    as BE
 import qualified GHCJS.DOM.HTMLFormElement      as FE
 import qualified GHCJS.DOM.HTMLInputElement     as IE
 import qualified GHCJS.DOM.HTMLTableElement     as TE
 import qualified GHCJS.DOM.Node                 as NE
 import qualified GHCJS.DOM.Types                as T
+import           GHCJS.Foreign.Callback
 import qualified GHCJS.Marshal.Internal         as GMI
 import qualified GHCJS.Types                    as TS
-import qualified GHCJS.DOM.HTMLButtonElement    as BE
-import GHCJS.Foreign.Callback
 import           Prelude                        hiding ((!!))
 
 -- Vogliamo convertire Quote automaticamente da/a un JSVal. Per far questo
@@ -49,7 +49,8 @@ foreign import javascript unsafe "$r = window[$1]" readGlobal ::
                TS.JSString -> IO TS.JSVal
 
 foreign import javascript unsafe "require('fs').stat($1)"
-  writeGlobalFunction :: TS.JSString -> Callback (TS.JSVal -> IO ()) -> IO ()
+               writeGlobalFunction ::
+               TS.JSString -> Callback (TS.JSVal -> IO ()) -> IO ()
 
 -- Queste due funzioni ci permettono di scrivere e leggere una variabile Haskell in una
 -- variabile globale javascript
@@ -59,7 +60,7 @@ writeID num = do
   writeGlobal (DJS.pack "idQuote") idToSave
 
 readID :: IO Int
-readID = do 
+readID = do
   idNum <- readGlobal (DJS.pack "idQuote")
   (Just (idToSave :: Int)) <- GMI.fromJSVal idNum
   return idToSave
@@ -83,61 +84,55 @@ readQuoteArray = do
 
 writeQuoteArray :: [Quote] -> IO ()
 writeQuoteArray q = do
-  arrayQuote <- GMI.toJSVal q 
+  arrayQuote <- GMI.toJSVal q
   writeGlobal (DJS.pack "arrayQuote") arrayQuote
-
 
 main :: IO ()
 main =
   let gGetById f d i = fmap f <$> D.getElementById d i
-      
       uGetById d i = do
         Just e <- D.getElementById d i
         return e
-
       gGetByTagName f d i = fmap f <$> E.getElementsByTagName d i
-
       getTextValueWithId d i = do
         Just t <- gGetById IE.castToHTMLInputElement d i
         (t' :: Maybe String) <- IE.getValue t
         case t' of
           Just t'' -> return t''
           Nothing  -> error "Invalid id specified"
-
       getQuoteFromPage d = do
         newQuote <- getTextValueWithId d "new-quote"
         author <- getTextValueWithId d "quote-author"
         return $ Quote newQuote author
-
       createRowFromQuote d q = do
         Just e <- D.createElement d (Just "tr")
-        idNum <- liftIO $ readID
+        idNum <- liftIO readID
         E.setId e (show idNum)
-	listIO$ writeID idNum +1 
+        liftIO $ writeID $ idNum + 1
         E.setInnerHTML e $
-          Just $ 
-        "<td>" ++ quoteText q ++ "</td><td>" ++ quoteAuthor q ++ "</td><button onClick=" ++ "myHandler(id)" ++ ">" ++ "Delete" ++ "</button>"
+          Just $
+          "<td>" ++
+          quoteText q ++
+          "</td><td>" ++
+          quoteAuthor q ++
+          "</td><button onClick=" ++ "myHandler(id)" ++ ">Delete</button>"
         return e
-
       addRowToTable d r = do
         qt <- uGetById d "quotations"
         _ <- NE.appendChild qt (Just r)
         return ()
-
     -- si dovrebbe scrivere l'handler che deve riuscire a chiamare la funzione di haskell
-	-- per riuscirci dobbiamo capire per bene come funziona la questione della call back
-
-
-  in R.runWebGUI $ \webView -> do     
+    -- per riuscirci dobbiamo capire per bene come funziona la questione della call back
+  in R.runWebGUI $ \webView -> do
        Just doc <- R.webViewGetDomDocument webView
        Just myForm <- gGetById FE.castToHTMLFormElement doc "add-form"
        writeQuoteArray []
        void $
          Ev.on myForm E.submit $ do
-          Ev.preventDefault
-          q <- getQuoteFromPage doc
-          qa <- liftIO readQuoteArray
-          liftIO $ writeQuoteArray (qa ++ [q])
-          r <- createRowFromQuote doc q
-          addRowToTable doc r
+           Ev.preventDefault
+           q <- getQuoteFromPage doc
+           qa <- liftIO readQuoteArray
+           liftIO $ writeQuoteArray (qa ++ [q])
+           r <- createRowFromQuote doc q
+           addRowToTable doc r
        return ()
