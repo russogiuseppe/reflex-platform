@@ -48,7 +48,7 @@ foreign import javascript unsafe "window[$1] = $2" writeGlobal ::
 foreign import javascript unsafe "$r = window[$1]" readGlobal ::
                TS.JSString -> IO TS.JSVal
 
-foreign import javascript unsafe "require('fs').stat($1)"
+foreign import javascript unsafe "window[$1] = $2"
                writeGlobalFunction ::
                TS.JSString -> Callback (TS.JSVal -> IO ()) -> IO ()
 
@@ -127,7 +127,10 @@ main =
        Just doc <- R.webViewGetDomDocument webView
        Just myForm <- gGetById FE.castToHTMLFormElement doc "add-form"
        writeQuoteArray []
-       deleteQuote <- asyncCallback1 $ \idNum -> do { qut <- uGetById doc idNum; Just table <- NE.getParentNode (Just qut); NE.removeChild table (Just qut); return() }
+       deleteQuote <- asyncCallback1 $ \idNum -> do { qut <- uGetById doc idNum; 
+                                                      Just table <- NE.getParentNode (Just qut); 
+                                                      NE.removeChild table (Just qut); 
+                                                      return() }
        writeGlobalFunction (DJS.pack "myHandler(idNum)") deleteQuote
        void $
          Ev.on myForm E.submit $ do
