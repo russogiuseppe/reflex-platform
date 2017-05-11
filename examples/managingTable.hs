@@ -115,7 +115,7 @@ main =
           quoteText q ++
           "</td><td>" ++
           quoteAuthor q ++
-          "</td><button onClick=" ++ "myHandler"++"(" ++ show idNum ++ ")" ++ ">Delete</button>"
+          "</td><button onClick=" ++ "myHandler" ++ "(" ++ show idNum ++ ")" ++ ">Delete</button>"
         return e
       addRowToTable d r = do
         qt <- uGetById d "quotations"
@@ -127,11 +127,12 @@ main =
        Just doc <- R.webViewGetDomDocument webView
        Just myForm <- gGetById FE.castToHTMLFormElement doc "add-form"
        writeQuoteArray []
-       deleteQuote <- asyncCallback1 $ \idNum -> do { qut <- uGetById doc idNum; 
-                                                      Just table <- NE.getParentNode (Just qut); 
+       deleteQuote <- asyncCallback1 $ \idNum -> do { (Just (idn :: Int)) <- GMI.fromJSVal idNum;
+                                                      qut <- uGetById doc ("row" ++ show idn); 
+                                                      Just table <- NE.getParentNode qut; 
                                                       NE.removeChild table (Just qut); 
                                                       return() }
-       writeGlobalFunction (DJS.pack "myHandler(idNum)") deleteQuote
+       writeGlobalFunction (DJS.pack "myHandler") deleteQuote
        void $
          Ev.on myForm E.submit $ do
            Ev.preventDefault
