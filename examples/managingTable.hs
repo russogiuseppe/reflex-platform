@@ -107,15 +107,15 @@ main =
       createRowFromQuote d q = do
         Just e <- D.createElement d (Just "tr")
         idNum <- liftIO readID
-        E.setId e (show idNum)
-        liftIO $ writeID $ idNum + 1
+        E.setId e ("row" ++ (show idNum))
+        --liftIO $ writeID $ idNum + 1
         E.setInnerHTML e $
           Just $
           "<td>" ++
           quoteText q ++
           "</td><td>" ++
           quoteAuthor q ++
-          "</td><button onClick=" ++ "myHandler(id)" ++ ">Delete</button>"
+          "</td><button onClick=" ++ "myHandler"++"(" ++ show idNum ++ ")" ++ ">Delete</button>"
         return e
       addRowToTable d r = do
         qt <- uGetById d "quotations"
@@ -127,6 +127,8 @@ main =
        Just doc <- R.webViewGetDomDocument webView
        Just myForm <- gGetById FE.castToHTMLFormElement doc "add-form"
        writeQuoteArray []
+       deleteQuote <- asyncCallback1 $ \idNum -> do { qut <- uGetById doc idNum; Just table <- NE.getParentNode (Just qut); NE.removeChild table (Just qut); return() }
+       writeGlobalFunction (DJS.pack "myHandler(idNum)") deleteQuote
        void $
          Ev.on myForm E.submit $ do
            Ev.preventDefault
@@ -134,5 +136,7 @@ main =
            qa <- liftIO readQuoteArray
            liftIO $ writeQuoteArray (qa ++ [q])
            r <- createRowFromQuote doc q
+           idNum <- liftIO readID
+           liftIO $ writeID (idNum + 1)
            addRowToTable doc r
        return ()
