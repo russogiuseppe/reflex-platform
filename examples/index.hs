@@ -106,7 +106,8 @@ main =
       getQuoteFromPage d = do
         newQuote <- getTextValueWithId d "new-quote"
         author <- getTextValueWithId d "quote-author"
-        return $ Quote newQuote author
+        if author == [] then return $ Quote newQuote "Anonymous"
+        else return $ Quote newQuote author
       createRowFromQuote d q = do
         Just e <- D.createElement d (Just "tr")
         idNum <- liftIO readID
@@ -144,6 +145,8 @@ main =
          Ev.on myForm E.submit $ do
            Ev.preventDefault
            q <- getQuoteFromPage doc
+           if (quoteText q) == [] then return() 
+           else do
            qa <- liftIO readQuoteArray
            idNum <- liftIO readID
            liftIO $ writeQuoteArray (qa ++ [(show idNum, q)])
