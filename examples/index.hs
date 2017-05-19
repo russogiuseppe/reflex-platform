@@ -52,6 +52,8 @@ foreign import javascript unsafe "window[$1] = $2"
                writeGlobalFunction ::
                TS.JSString -> Callback (TS.JSVal -> IO ()) -> IO ()
 
+foreign import javascript unsafe "fetch($1)" fetch :: TS.JSString -> IO()
+
 -- Queste due funzioni ci permettono di scrivere e leggere una variabile Haskell in una
 -- variabile globale javascript
 writeID :: Int -> IO ()
@@ -141,6 +143,7 @@ main =
        writeQuoteArray []
        deleteQuote <- asyncCallback1 $ \idNum -> setFunction idNum doc
        writeGlobalFunction (DJS.pack "myHandler") deleteQuote
+       fetch (T.toJSString "./startQuotaions")
        void $
          Ev.on myForm E.submit $ do
            Ev.preventDefault
