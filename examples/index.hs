@@ -143,7 +143,7 @@ main =
        writeQuoteArray []
        deleteQuote <- asyncCallback1 $ \idNum -> setFunction idNum doc
        writeGlobalFunction (DJS.pack "myHandler") deleteQuote
-       fetch (T.toJSString "./startQuotaions")
+       fetch (T.toJSString "./startQuotaions") 
        void $
          Ev.on myForm E.submit $ do
            Ev.preventDefault
