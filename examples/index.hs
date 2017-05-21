@@ -41,6 +41,7 @@ data Quote = Quote
   , quoteAuthor :: String
   } deriving (Eq, Show, Read, Generic, GMI.ToJSVal, GMI.FromJSVal)
 
+
 -- Funzioni ausiliarie per leggere e scrivere un valore globale nel browser
 foreign import javascript unsafe "window[$1] = $2" writeGlobal ::
                TS.JSString -> TS.JSVal -> IO ()
@@ -53,6 +54,7 @@ foreign import javascript unsafe "window[$1] = $2"
                TS.JSString -> Callback (TS.JSVal -> IO ()) -> IO ()
 
 foreign import javascript unsafe "fetch($1)" fetch :: TS.JSString -> IO()
+foreign import javascript unsafe "response.json()" responseJson :: IO()
 
 -- Queste due funzioni ci permettono di scrivere e leggere una variabile Haskell in una
 -- variabile globale javascript
@@ -91,6 +93,15 @@ writeQuoteArray q = do
 
 deleteQuoteArray :: [(String, Quote)] -> String -> [(String, Quote)]
 deleteQuoteArray xs el = [x | x <- xs, not (fst x == el)]
+
+ENDPOINT :: String
+ENDPOINT = "./startQuotations"
+
+
+loadQuotations :: IO()
+--non capisco cosa fare con la function(response)
+loadQuotations = fetch (T.toJSString ENDPOINT) >>= responseJson
+ 
 
 main :: IO ()
 main =
@@ -143,7 +154,7 @@ main =
        writeQuoteArray []
        deleteQuote <- asyncCallback1 $ \idNum -> setFunction idNum doc
        writeGlobalFunction (DJS.pack "myHandler") deleteQuote
-       fetch (T.toJSString "./startQuotaions") 
+       fetch (T.toJSString ENDPOINT) 
        void $
          Ev.on myForm E.submit $ do
            Ev.preventDefault
