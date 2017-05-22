@@ -33,6 +33,7 @@ import           GHCJS.Foreign.Callback
 import qualified GHCJS.Marshal.Internal         as GMI
 import qualified GHCJS.Types                    as TS
 import           Prelude                        hiding ((!!))
+import qualified GHCJS.DOM.XMLHttpRequest       as XM 
 
 -- Vogliamo convertire Quote automaticamente da/a un JSVal. Per far questo
 -- usiamo "deriving ... GMI.ToJSVal, FMI.FromJSVal"
@@ -53,8 +54,8 @@ foreign import javascript unsafe "window[$1] = $2"
                writeGlobalFunction ::
                TS.JSString -> Callback (TS.JSVal -> IO ()) -> IO ()
 
-foreign import javascript unsafe "fetch($1)" fetch :: TS.JSString -> IO()
-foreign import javascript unsafe "response.json()" responseJson :: IO()
+foreign import javascript unsafe "fetch($1)" fetch :: TS.JSString -> IO XM.Response
+foreign import javascript unsafe "response.json()" responseJson :: IO XM.Response
 
 -- Queste due funzioni ci permettono di scrivere e leggere una variabile Haskell in una
 -- variabile globale javascript
@@ -94,13 +95,13 @@ writeQuoteArray q = do
 deleteQuoteArray :: [(String, Quote)] -> String -> [(String, Quote)]
 deleteQuoteArray xs el = [x | x <- xs, not (fst x == el)]
 
-ENDPOINT :: String
-ENDPOINT = "./startQuotations"
+endpoint :: String
+endpoint = "./startQuotations"
 
 
-loadQuotations :: IO()
+{- loadQuotations :: IO()
 --non capisco cosa fare con la function(response)
-loadQuotations = fetch (T.toJSString ENDPOINT) >>= responseJson
+loadQuotations = fetch (T.toJSString ) >>= responseJson -}
  
 
 main :: IO ()
@@ -154,7 +155,7 @@ main =
        writeQuoteArray []
        deleteQuote <- asyncCallback1 $ \idNum -> setFunction idNum doc
        writeGlobalFunction (DJS.pack "myHandler") deleteQuote
-       fetch (T.toJSString ENDPOINT) 
+       liftIO $ do {fetch (T.toJSString endpoint); responseJson; return();}
        void $
          Ev.on myForm E.submit $ do
            Ev.preventDefault
