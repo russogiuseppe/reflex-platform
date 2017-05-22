@@ -62,8 +62,11 @@ type Promise = TS.JSVal
 foreign import javascript unsafe "$r = $1[$2]()" callm1 ::
      TS.JSVal -> TS.JSString -> IO TS.JSVal
 
-foreign import javascript unsafe "$r = $1.then($2)" js_then ::
+foreign import javascript unsafe "$r = $1.then($2)" js_then' ::
      Promise -> Callback (TS.JSVal -> IO Promise)  -> IO Promise
+
+foreign import javascript unsafe "$r = $1.then($2)" js_then ::
+     Promise -> Callback (TS.JSVal -> IO ())  -> IO Promise
 
 fetch x = do
   myValue <- GMI.toJSVal x
@@ -76,7 +79,17 @@ myGetJSON url = do
                 v <- callm1 r (T.toJSString "json")
                 return v
                 )
-  js_then o cb
+  js_then' o cb
+
+convertIntoArray url = do 
+  val <- myGetJSON url
+  cb <- (asyncCallback1 $ \res -> do 
+                (Just (array :: [Quote])) <- GMI.fromJSVal res 
+                writeArray array 
+                return () )
+  _ <- js_then val cb 
+  return()
+
 
 -- Queste due funzioni ci permettono di scrivere e leggere una variabile Haskell in una
 -- variabile globale javascript
@@ -113,11 +126,23 @@ writeQuoteArray q = do
   arrayQuote <- GMI.toJSVal q
   writeGlobal (DJS.pack "arrayQuote") arrayQuote
 
+readArray :: IO [Quote]
+readArray = do 
+  valueRead <- readGlobal (DJS.pack "aQuote")
+  (Just (q :: [Quote])) <- GMI.fromJSVal valueRead
+  return q 
+
+writeArray :: [Quote] -> IO ()
+writeArray q = do 
+  arrayQuote <- GMI.toJSVal q 
+  writeGlobal (DJS.pack "aQuote") arrayQuote 
+
+
 deleteQuoteArray :: [(String, Quote)] -> String -> [(String, Quote)]
 deleteQuoteArray xs el = [x | x <- xs, not (fst x == el)]
 
 endpoint :: String
-endpoint = "./startQuotations.json"
+endpoint = "./startQuotations.json "
 
 
 {- loadQuotations :: IO()
@@ -174,10 +199,11 @@ main =
        Just doc <- R.webViewGetDomDocument webView
        Just myForm <- gGetById FE.castToHTMLFormElement doc "add-form"
        writeQuoteArray []
+       writeArray []
        deleteQuote <- asyncCallback1 $ \idNum -> setFunction idNum doc
        writeGlobalFunction (DJS.pack "myHandler") deleteQuote
        -- liftIO $ do {fetch (T.toJSString endpoint); responseJson; return();}
-       liftIO $ myGetJSON endpoint
+       liftIO $ convertIntoArray endpoint
        void $
          Ev.on myForm E.submit $ do
            Ev.preventDefault
