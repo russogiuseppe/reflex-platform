@@ -54,8 +54,28 @@ foreign import javascript unsafe "window[$1] = $2"
                writeGlobalFunction ::
                TS.JSString -> Callback (TS.JSVal -> IO ()) -> IO ()
 
-foreign import javascript unsafe "fetch($1)" fetch :: TS.JSString -> IO XM.Response
-foreign import javascript unsafe "response.json()" responseJson :: IO XM.Response
+foreign import javascript safe "$r = window[$1]($2)" invoke1 ::
+               JSString -> TS.JSVal -> IO TS.JSVal
+
+type Promise = TS.JSVal
+
+foreign import javascript unsafe "$r = $1[$2]()" callm1 ::
+     TS.JSVal -> TS.JSString -> IO TS.JSVal
+
+foreign import javascript unsafe "$r = $1.then($2)" js_then ::
+     Promise -> Callback (TS.JSVal -> IO Promise)  -> IO Promise
+
+fetch x = do
+  myValue <- GMI.toJSVal x
+  invoke1 (T.toJSString "fetch") myValue
+
+myGetJSON url = do
+  o <- fetch url
+  cb <- (syncCallback1' $ \r -> do
+                v <- callm1 r (T.toJSString "json")
+                return v
+                )
+  js_then o cb
 
 -- Queste due funzioni ci permettono di scrivere e leggere una variabile Haskell in una
 -- variabile globale javascript
@@ -155,7 +175,7 @@ main =
        writeQuoteArray []
        deleteQuote <- asyncCallback1 $ \idNum -> setFunction idNum doc
        writeGlobalFunction (DJS.pack "myHandler") deleteQuote
-       liftIO $ do {fetch (T.toJSString endpoint); responseJson; return();}
+       -- liftIO $ do {fetch (T.toJSString endpoint); responseJson; return();}
        void $
          Ev.on myForm E.submit $ do
            Ev.preventDefault
