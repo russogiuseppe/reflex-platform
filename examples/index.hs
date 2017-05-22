@@ -69,6 +69,7 @@ fetch x = do
   myValue <- GMI.toJSVal x
   invoke1 (T.toJSString "fetch") myValue
 
+
 myGetJSON url = do
   o <- fetch url
   cb <- (syncCallback1' $ \r -> do
@@ -116,7 +117,7 @@ deleteQuoteArray :: [(String, Quote)] -> String -> [(String, Quote)]
 deleteQuoteArray xs el = [x | x <- xs, not (fst x == el)]
 
 endpoint :: String
-endpoint = "./startQuotations"
+endpoint = "./startQuotations.json"
 
 
 {- loadQuotations :: IO()
@@ -176,6 +177,7 @@ main =
        deleteQuote <- asyncCallback1 $ \idNum -> setFunction idNum doc
        writeGlobalFunction (DJS.pack "myHandler") deleteQuote
        -- liftIO $ do {fetch (T.toJSString endpoint); responseJson; return();}
+       liftIO $ myGetJSON endpoint
        void $
          Ev.on myForm E.submit $ do
            Ev.preventDefault
