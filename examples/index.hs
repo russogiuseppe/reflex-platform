@@ -81,27 +81,6 @@ myGetJSON url = do
                 )
   js_then' o cb
 
-{-convertIntoArray d url = do 
-  val <- myGetJSON url
-  cb <- (asyncCallback1 $ \res -> do 
-                (Just (array :: [Quote])) <- GMI.fromJSVal res 
-                mapM_ (\x -> do {
-                            id <- liftIO readID;
-                            aq <- liftIO readQuoteArray;
-                            row <- createRowFromQuote d x; 
-                            addRowToTable d row;
-                            writeQuoteArray (aq ++ [(show id, x)]);
-                            liftIO $ writeID (id + 1);
-                            return ();
-                  }) array 
-                return () )
-  _ <- js_then val cb 
-  return() -}
-
-{-fromElemToTpl :: a -> b -> (a,b)
-fromElemToTpl x y = (x,y) -}
-
-
 -- Queste due funzioni ci permettono di scrivere e leggere una variabile Haskell in una
 -- variabile globale javascript
 writeID :: Int -> IO ()
@@ -154,11 +133,6 @@ deleteQuoteArray xs el = [x | x <- xs, not (fst x == el)]
 
 endpoint :: String
 endpoint = "./startQuotations.json "
-
-
-{- loadQuotations :: IO()
---non capisco cosa fare con la function(response)
-loadQuotations = fetch (T.toJSString ) >>= responseJson -}
  
 
 main :: IO ()
@@ -183,7 +157,6 @@ main =
         Just e <- D.createElement d (Just "tr")
         idNum <- liftIO readID
         E.setId e ("row" ++ show idNum)
-        --liftIO $ writeID $ idNum + 1
         E.setInnerHTML e $
           Just $
           "<td>" ++
@@ -237,7 +210,6 @@ main =
        writeArray []
        deleteQuote <- asyncCallback1 $ \idNum -> setFunction idNum doc
        writeGlobalFunction (DJS.pack "myHandler") deleteQuote
-       -- liftIO $ do {fetch (T.toJSString endpoint); responseJson; return();}
        liftIO $ convertIntoArray doc endpoint
        void $
          Ev.on myForm E.submit $ do
