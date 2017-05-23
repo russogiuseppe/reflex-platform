@@ -81,14 +81,25 @@ myGetJSON url = do
                 )
   js_then' o cb
 
-convertIntoArray url = do 
+{-convertIntoArray d url = do 
   val <- myGetJSON url
   cb <- (asyncCallback1 $ \res -> do 
                 (Just (array :: [Quote])) <- GMI.fromJSVal res 
-                writeArray array 
+                mapM_ (\x -> do {
+                            id <- liftIO readID;
+                            aq <- liftIO readQuoteArray;
+                            row <- createRowFromQuote d x; 
+                            addRowToTable d row;
+                            writeQuoteArray (aq ++ [(show id, x)]);
+                            liftIO $ writeID (id + 1);
+                            return ();
+                  }) array 
                 return () )
   _ <- js_then val cb 
-  return()
+  return() -}
+
+{-fromElemToTpl :: a -> b -> (a,b)
+fromElemToTpl x y = (x,y) -}
 
 
 -- Queste due funzioni ci permettono di scrivere e leggere una variabile Haskell in una
@@ -193,6 +204,30 @@ main =
         Just table <- NE.getParentNode qut 
         NE.removeChild table (Just qut) 
         return() 
+      showQuotations d q = do
+      	Just e <- D.createElement d (Just "tr")
+      	idNum <- liftIO readID 
+      	E.setId e ("row" ++ show idNum)
+      	E.setInnerHTML e $ 
+      		Just $
+      		"<td>" ++ quoteText q ++ "</td><td>" ++ "by " ++ quoteAuthor q ++ "</td>"
+      	return e 
+      convertIntoArray d url = do 
+  		val <- myGetJSON url
+ 		cb <- (asyncCallback1 $ \res -> do 
+                	(Just (array :: [Quote])) <- GMI.fromJSVal res 
+                	mapM_ (\x -> do {
+                            id <- liftIO readID;
+                            aq <- liftIO readQuoteArray;
+                            row <- showQuotations d x; 
+                            addRowToTable d row;
+                            writeQuoteArray (aq ++ [(show id, x)]);
+                            liftIO $ writeID (id + 1);
+                            return ();
+                  }) array 
+                	return () )
+  		_ <- js_then val cb 
+  		return()
     -- si dovrebbe scrivere l'handler che deve riuscire a chiamare la funzione di haskell
     -- per riuscirci dobbiamo capire per bene come funziona la questione della call back
   in R.runWebGUI $ \webView -> do
@@ -203,7 +238,7 @@ main =
        deleteQuote <- asyncCallback1 $ \idNum -> setFunction idNum doc
        writeGlobalFunction (DJS.pack "myHandler") deleteQuote
        -- liftIO $ do {fetch (T.toJSString endpoint); responseJson; return();}
-       liftIO $ convertIntoArray endpoint
+       liftIO $ convertIntoArray doc endpoint
        void $
          Ev.on myForm E.submit $ do
            Ev.preventDefault
