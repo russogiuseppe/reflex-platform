@@ -16,6 +16,7 @@ import           Control.Monad
 -- https://hackage.haskell.org/package/ghcjs-dom-0.2.3.1/ghcjs-dom-0.2.3.1.tar.gz
 import           Control.Monad.Trans.Class
 import           Control.Monad.Trans.State.Lazy
+import           Data.Typeable
 import           Data.Char
 import           Data.JSString                  as DJS
 import           GHC.Generics
@@ -42,8 +43,19 @@ data Quote = Quote
   , quoteAuthor :: String
   } deriving (Eq, Show, Read, Generic, GMI.ToJSVal, GMI.FromJSVal)
 
+data Request = Request 
+  { method :: JSString,
+    body :: TS.JSString,
+    headers :: TS.JSVal
+    } deriving ({-Eq, Show, Read, Generic, -}GMI.ToJSVal, GMI.FromJSVal, Typeable)
+
+
+type Header = TS.JSVal
+type Promise = TS.JSVal
 
 -- Funzioni ausiliarie per leggere e scrivere un valore globale nel browser
+foreign import javascript unsafe "$r = {$1 : $2}" js_setHeader ::
+               TS.JSString -> TS.JSString -> IO Header 
 foreign import javascript unsafe "window[$1] = $2" writeGlobal ::
                TS.JSString -> TS.JSVal -> IO ()
 
@@ -54,10 +66,14 @@ foreign import javascript unsafe "window[$1] = $2"
                writeGlobalFunction ::
                TS.JSString -> Callback (TS.JSVal -> IO ()) -> IO ()
 
+foreign import javascript unsafe "JSON.stringify($1)" js_encode ::
+               TS.JSVal -> TS.JSString
+
 foreign import javascript safe "$r = window[$1]($2)" invoke1 ::
                JSString -> TS.JSVal -> IO TS.JSVal
 
-type Promise = TS.JSVal
+foreign import javascript safe "$r = window[$1]($2,$3)" invoke2 ::
+               TS.JSString -> TS.JSVal -> TS.JSVal -> IO TS.JSVal
 
 foreign import javascript unsafe "$r = $1[$2]()" callm1 ::
      TS.JSVal -> TS.JSString -> IO TS.JSVal
@@ -72,6 +88,19 @@ fetch x = do
   myValue <- GMI.toJSVal x
   invoke1 (T.toJSString "fetch") myValue
 
+fetch' x y = do
+  myValue <- GMI.toJSVal x 
+  myRequest <- GMI.toJSVal y 
+  invoke2 (T.toJSString "fetch") myValue myRequest
+
+
+myGetJSON' url y = do
+  o <- fetch url y 
+  cb <- (syncCallback1' $ \r -> do
+                v <- callm1 r (T.toJSString "json")
+                return v
+                )
+  js_then' o cb
 
 myGetJSON url = do
   o <- fetch url
@@ -185,9 +214,9 @@ main =
       		Just $
       		"<td>" ++ quoteText q ++ "</td><td>" ++ "by " ++ quoteAuthor q ++ "</td>"
       	return e 
-      convertIntoArray d url = do 
-  		val <- myGetJSON url
- 		cb <- (asyncCallback1 $ \res -> do 
+      convertIntoArray d url = do {
+  		  val <- myGetJSON url;
+ 		     cb <- (asyncCallback1 $ \res -> do 
                 	(Just (array :: [Quote])) <- GMI.fromJSVal res 
                 	mapM_ (\x -> do {
                             id <- liftIO readID;
@@ -197,10 +226,10 @@ main =
                             writeQuoteArray (aq ++ [(show id, x)]);
                             liftIO $ writeID (id + 1);
                             return ();
-                  }) array 
-                	return () )
-  		_ <- js_then val cb 
-  		return()
+                  }) array
+                	return () );
+  		  _ <- js_then val cb ;
+  		  return(); }
     -- si dovrebbe scrivere l'handler che deve riuscire a chiamare la funzione di haskell
     -- per riuscirci dobbiamo capire per bene come funziona la questione della call back
   in R.runWebGUI $ \webView -> do
@@ -213,14 +242,18 @@ main =
        liftIO $ convertIntoArray doc endpoint
        void $
          Ev.on myForm E.submit $ do
-           Ev.preventDefault
-           q <- getQuoteFromPage doc
-           if (quoteText q) == [] then return() 
-           else do
-           qa <- liftIO readQuoteArray
-           idNum <- liftIO readID
-           liftIO $ writeQuoteArray (qa ++ [(show idNum, q)])
-           r <- createRowFromQuote doc q
-           liftIO $ writeID (idNum + 1)
-           addRowToTable doc r
-       return ()
+          Ev.preventDefault
+          q <- getQuoteFromPage doc
+          if (quoteText q) == [] then return() 
+          else do {
+          h <- liftIO $ js_setHeader "content-type" "application/json";
+          resp <- myGetJSON' endpoint Request "POST" (js_encode (T.toJSVal q)) h;
+          cb <- (asyncCallback1 $ \res -> do 
+                          )
+          qa <- liftIO readQuoteArray;
+          idNum <- liftIO readID;
+          liftIO $ writeQuoteArray (qa ++ [(show idNum, q)]);
+           r <- createRowFromQuote doc q;
+           liftIO $ writeID (idNum + 1);
+          addRowToTable doc r;
+       return (); }
