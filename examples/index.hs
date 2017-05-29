@@ -39,21 +39,23 @@ import qualified GHCJS.DOM.XMLHttpRequest       as XM
 -- Vogliamo convertire Quote automaticamente da/a un JSVal. Per far questo
 -- usiamo "deriving ... GMI.ToJSVal, FMI.FromJSVal"
 data Quote = Quote
-  { quoteText   :: String
-  , quoteAuthor :: String
-  } deriving (Eq, Show, Read, Generic, GMI.ToJSVal, GMI.FromJSVal)
+  { text   :: String
+  , author :: String
+  , id :: Int 
+  , isSticky :: Bool
+  } deriving (Eq, Show, Read, Generic, GMI.ToJSVal, GMI.FromJSVal, Typeable)
 
 data Request = Request 
-  { method :: JSString,
+  { method :: TS.JSString,
     body :: TS.JSString,
-    headers :: TS.JSVal
-    } deriving ({-Eq, Show, Read, Generic, -}GMI.ToJSVal, GMI.FromJSVal, Typeable)
+    headers :: Header
+    } deriving (Typeable) 
 
 
 type Header = TS.JSVal
 type Promise = TS.JSVal
 
--- Funzioni ausiliarie per leggere e scrivere un valore globale nel browser
+-- Funzioni ausiliarie per leggere e scrivere un valore globale nel browser       
 foreign import javascript unsafe "$r = {$1 : $2}" js_setHeader ::
                TS.JSString -> TS.JSString -> IO Header 
 foreign import javascript unsafe "window[$1] = $2" writeGlobal ::
@@ -76,32 +78,35 @@ foreign import javascript safe "$r = window[$1]($2,$3)" invoke2 ::
                TS.JSString -> TS.JSVal -> TS.JSVal -> IO TS.JSVal
 
 foreign import javascript unsafe "$r = $1[$2]()" callm1 ::
-     TS.JSVal -> TS.JSString -> IO TS.JSVal
+                TS.JSVal -> TS.JSString -> IO TS.JSVal
 
 foreign import javascript unsafe "$r = $1.then($2)" js_then' ::
-     Promise -> Callback (TS.JSVal -> IO Promise)  -> IO Promise
+                Promise -> Callback (TS.JSVal -> IO Promise)  -> IO Promise
 
 foreign import javascript unsafe "$r = $1.then($2)" js_then ::
-     Promise -> Callback (TS.JSVal -> IO ())  -> IO Promise
+                Promise -> Callback (TS.JSVal -> IO ())  -> IO Promise
 
+
+fetch :: String -> IO Promise
 fetch x = do
   myValue <- GMI.toJSVal x
   invoke1 (T.toJSString "fetch") myValue
 
+fetch' :: String -> Request -> IO Promise 
 fetch' x y = do
-  myValue <- GMI.toJSVal x 
-  myRequest <- GMI.toJSVal y 
-  invoke2 (T.toJSString "fetch") myValue myRequest
+  myValue <- GMI.toJSVal x  
+  invoke2 (T.toJSString "fetch") myValue y
 
-
+myGetJSON' :: String -> Request -> IO Promise 
 myGetJSON' url y = do
-  o <- fetch url y 
+  o <- fetch' url y 
   cb <- (syncCallback1' $ \r -> do
                 v <- callm1 r (T.toJSString "json")
                 return v
                 )
-  js_then' o cb
+  js_then' o cb 
 
+myGetJSON :: String -> IO Promise
 myGetJSON url = do
   o <- fetch url
   cb <- (syncCallback1' $ \r -> do
@@ -112,7 +117,7 @@ myGetJSON url = do
 
 -- Queste due funzioni ci permettono di scrivere e leggere una variabile Haskell in una
 -- variabile globale javascript
-writeID :: Int -> IO ()
+{-writeID :: Int -> IO ()
 writeID num = do
   idToSave <- GMI.toJSVal num
   writeGlobal (DJS.pack "idQuote") idToSave
@@ -158,10 +163,10 @@ writeArray q = do
 
 
 deleteQuoteArray :: [(String, Quote)] -> String -> [(String, Quote)]
-deleteQuoteArray xs el = [x | x <- xs, not (fst x == el)]
+deleteQuoteArray xs el = [x | x <- xs, not (fst x == el)] -}
 
 endpoint :: String
-endpoint = "./startQuotations.json "
+endpoint = "api/quotations"
  
 
 main :: IO ()
@@ -184,15 +189,14 @@ main =
         else return $ Quote newQuote author
       createRowFromQuote d q = do
         Just e <- D.createElement d (Just "tr")
-        idNum <- liftIO readID
-        E.setId e ("row" ++ show idNum)
+        E.setId e (show (id q))
         E.setInnerHTML e $
           Just $
           "<td>" ++
-          quoteText q ++
+          text q ++
           "</td><td>" ++
-          "by " ++ quoteAuthor q ++
-          "</td><button onClick=" ++ "myHandler" ++ "(" ++ show idNum ++ ")" ++ ">Delete</button>"
+          "by " ++ author q ++
+          "</td><button onClick=" ++ "myHandler" ++ "(" ++ show (id q) ++ ")" ++ ">Delete</button>"
         return e
       addRowToTable d r = do
         qt <- uGetById d "quotations"
@@ -200,60 +204,60 @@ main =
         return ()
       setFunction idNum doc = do 
         (Just (idn :: Int)) <- GMI.fromJSVal idNum
-        qut <- uGetById doc ("row" ++ show idn) 
-        quotations <- liftIO readQuoteArray
-        liftIO $ writeQuoteArray (deleteQuoteArray quotations (show idn))
-        Just table <- NE.getParentNode qut 
-        NE.removeChild table (Just qut) 
-        return() 
+        o <- fetch' (endpoint ++ "/" ++ show(idn)) Request "DELETE"
+        cb <- (asyncCallback1 $ \_ -> do{
+          qut <- uGetById doc (show idn);
+          Just table <- NE.getParentNode qut 
+          return();
+          })
+        _ <- js_then o cb 
+        return();
       showQuotations d q = do
       	Just e <- D.createElement d (Just "tr")
-      	idNum <- liftIO readID 
-      	E.setId e ("row" ++ show idNum)
+      	E.setId e (show (id q))
       	E.setInnerHTML e $ 
       		Just $
-      		"<td>" ++ quoteText q ++ "</td><td>" ++ "by " ++ quoteAuthor q ++ "</td>"
+      		"<td>" ++ text q ++ "</td><td>" ++ "by " ++ author q ++ "</td>"
       	return e 
-      convertIntoArray d url = do {
+      loadQuotation d url = do {
   		  val <- myGetJSON url;
- 		     cb <- (asyncCallback1 $ \res -> do 
+ 		    cb <- (asyncCallback1 $ \res -> do 
                 	(Just (array :: [Quote])) <- GMI.fromJSVal res 
                 	mapM_ (\x -> do {
-                            id <- liftIO readID;
-                            aq <- liftIO readQuoteArray;
                             row <- showQuotations d x; 
                             addRowToTable d row;
-                            writeQuoteArray (aq ++ [(show id, x)]);
-                            liftIO $ writeID (id + 1);
                             return ();
                   }) array
                 	return () );
   		  _ <- js_then val cb ;
   		  return(); }
+      addQuote doc q = do{
+        quote <- T.toJSVal q;
+        hd <- liftIO $ js_setHeader (GMI.toJSString "content-type") (GMI.toJSString "application/json");
+        val <- myGetJson' endpoint (Request "Post" (js_encode q) hd);
+        cb <- (asyncCallback1 $ \res -> do{
+                      (Just (q::Quote)) <- GMI.fromJSVal;
+                      r <- createRowFromQuote doc q;
+                      addRowToTable doc r;
+                      return();
+          });
+        _ <- js_then val cb;
+        return();
+      }
     -- si dovrebbe scrivere l'handler che deve riuscire a chiamare la funzione di haskell
     -- per riuscirci dobbiamo capire per bene come funziona la questione della call back
   in R.runWebGUI $ \webView -> do
        Just doc <- R.webViewGetDomDocument webView
        Just myForm <- gGetById FE.castToHTMLFormElement doc "add-form"
-       writeQuoteArray []
-       writeArray []
        deleteQuote <- asyncCallback1 $ \idNum -> setFunction idNum doc
        writeGlobalFunction (DJS.pack "myHandler") deleteQuote
-       liftIO $ convertIntoArray doc endpoint
+       liftIO $ loadQuotation doc endpoint
        void $
          Ev.on myForm E.submit $ do
           Ev.preventDefault
           q <- getQuoteFromPage doc
-          if (quoteText q) == [] then return() 
+          if (text q) == [] then return() 
           else do {
-          h <- liftIO $ js_setHeader "content-type" "application/json";
-          resp <- myGetJSON' endpoint Request "POST" (js_encode (T.toJSVal q)) h;
-          cb <- (asyncCallback1 $ \res -> do 
-                          )
-          qa <- liftIO readQuoteArray;
-          idNum <- liftIO readID;
-          liftIO $ writeQuoteArray (qa ++ [(show idNum, q)]);
            r <- createRowFromQuote doc q;
-           liftIO $ writeID (idNum + 1);
           addRowToTable doc r;
        return (); }
