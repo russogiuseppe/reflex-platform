@@ -207,7 +207,8 @@ main =
         o <- fetch' (endpoint ++ "/" ++ show(idn)) Request "DELETE"
         cb <- (asyncCallback1 $ \_ -> do{
           qut <- uGetById doc (show idn);
-          Just table <- NE.getParentNode qut 
+          Just table <- NE.getParentNode qut;
+          NE.removeChild table (Just qut);
           return();
           })
         _ <- js_then o cb 
@@ -258,6 +259,5 @@ main =
           q <- getQuoteFromPage doc
           if (text q) == [] then return() 
           else do {
-           r <- createRowFromQuote doc q;
-          addRowToTable doc r;
+          addQuote doc q;
        return (); }
