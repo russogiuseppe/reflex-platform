@@ -49,7 +49,7 @@ data Request = Request
   { method :: TS.JSString,
     body :: TS.JSString,
     headers :: Header
-    } deriving (Typeable) 
+    } deriving (T.IsJSVal,Typeable) 
 
 
 type Header = TS.JSVal
