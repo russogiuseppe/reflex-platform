@@ -33,8 +33,9 @@ import qualified GHCJS.DOM.Types                as T
 import           GHCJS.Foreign.Callback
 import qualified GHCJS.Marshal.Internal         as GMI
 import qualified GHCJS.Types                    as TS
-import           Prelude                        hiding ((!!))
+import           Prelude                        hiding ((!!), id)
 import qualified GHCJS.DOM.XMLHttpRequest       as XM 
+import qualified JavaScript.Object.Internal     as O 
 
 -- Vogliamo convertire Quote automaticamente da/a un JSVal. Per far questo
 -- usiamo "deriving ... GMI.ToJSVal, FMI.FromJSVal"
@@ -46,21 +47,29 @@ data Quote = Quote
   } deriving (Eq, Show, Read, Generic, GMI.ToJSVal, GMI.FromJSVal, Typeable)
 
 data Request = Request 
-  { method :: TS.JSString,
-    body :: TS.JSString,
-    headers :: Header
-    } deriving (T.IsJSVal,Typeable) 
+  { method :: String,
+    body :: String
+    }deriving (Eq, Show, Read, Generic, GMI.ToJSVal, GMI.FromJSVal,Typeable)
 
 
 type Header = TS.JSVal
 type Promise = TS.JSVal
 
--- Funzioni ausiliarie per leggere e scrivere un valore globale nel browser       
+-- Funzioni ausiliarie per leggere e scrivere un valore globale nel browser 
+foreign import javascript unsafe "$1[$2]" getVal ::
+               TS.JSString -> TS.JSString -> IO TS.JSVal
+foreign import javascript unsafe "$1[$2]" getVal' ::
+               TS.JSVal -> TS.JSString -> IO TS.JSVal
+foreign import javascript unsafe "$1[$2] = $3" setVal ::
+               TS.JSVal -> TS.JSVal -> TS.JSVal -> IO () 
+foreign import javascript unsafe "$1[$2] = $3" setFoo :: 
+               TS.JSVal -> TS.JSString -> Callback (TS.JSVal -> IO () ) -> IO ()              
 foreign import javascript unsafe "$r = {$1 : $2}" js_setHeader ::
                TS.JSString -> TS.JSString -> IO Header 
 foreign import javascript unsafe "window[$1] = $2" writeGlobal ::
                TS.JSString -> TS.JSVal -> IO ()
-
+foreign import javascript unsafe "$r = function(){ $1[$2] = $3; return $1;}" setValIntoObject ::
+               TS.JSVal -> TS.JSString -> Header -> IO TS.JSVal 
 foreign import javascript unsafe "$r = window[$1]" readGlobal ::
                TS.JSString -> IO TS.JSVal
 
@@ -79,7 +88,8 @@ foreign import javascript safe "$r = window[$1]($2,$3)" invoke2 ::
 
 foreign import javascript unsafe "$r = $1[$2]()" callm1 ::
                 TS.JSVal -> TS.JSString -> IO TS.JSVal
-
+foreign import javascript unsafe "$1[$2]($3)" callm1WithVal :: 
+                TS.JSVal -> TS.JSString -> TS.JSString -> IO ()
 foreign import javascript unsafe "$r = $1.then($2)" js_then' ::
                 Promise -> Callback (TS.JSVal -> IO Promise)  -> IO Promise
 
@@ -92,12 +102,12 @@ fetch x = do
   myValue <- GMI.toJSVal x
   invoke1 (T.toJSString "fetch") myValue
 
-fetch' :: String -> Request -> IO Promise 
+fetch' :: String -> TS.JSVal -> IO Promise 
 fetch' x y = do
   myValue <- GMI.toJSVal x  
   invoke2 (T.toJSString "fetch") myValue y
 
-myGetJSON' :: String -> Request -> IO Promise 
+myGetJSON' :: String -> TS.JSVal -> IO Promise 
 myGetJSON' url y = do
   o <- fetch' url y 
   cb <- (syncCallback1' $ \r -> do
@@ -185,8 +195,8 @@ main =
       getQuoteFromPage d = do
         newQuote <- getTextValueWithId d "new-quote"
         author <- getTextValueWithId d "quote-author"
-        if author == [] then return $ Quote newQuote "Anonymous"
-        else return $ Quote newQuote author
+        if author == [] then return $ Quote newQuote "Anonymous" 0 False
+        else return $ Quote newQuote author 0 False
       createRowFromQuote d q = do
         Just e <- D.createElement d (Just "tr")
         E.setId e (show (id q))
@@ -204,9 +214,10 @@ main =
         return ()
       setFunction idNum doc = do 
         (Just (idn :: Int)) <- GMI.fromJSVal idNum
-        o <- fetch' (endpoint ++ "/" ++ show(idn)) Request "DELETE"
+        request <- GMI.toJSVal (Request "DELETE" "")
+        o <- fetch' (endpoint ++ "/" ++ show (idn)) request
         cb <- (asyncCallback1 $ \_ -> do{
-          qut <- uGetById doc (show idn);
+          qut <- uGetById doc (show (idn));
           Just table <- NE.getParentNode qut;
           NE.removeChild table (Just qut);
           return();
@@ -220,7 +231,7 @@ main =
       		Just $
       		"<td>" ++ text q ++ "</td><td>" ++ "by " ++ author q ++ "</td>"
       	return e 
-      loadQuotation d url = do {
+      loadQuotations d url = do {
   		  val <- myGetJSON url;
  		    cb <- (asyncCallback1 $ \res -> do 
                 	(Just (array :: [Quote])) <- GMI.fromJSVal res 
@@ -233,31 +244,52 @@ main =
   		  _ <- js_then val cb ;
   		  return(); }
       addQuote doc q = do{
-        quote <- T.toJSVal q;
-        hd <- liftIO $ js_setHeader (GMI.toJSString "content-type") (GMI.toJSString "application/json");
-        val <- myGetJson' endpoint (Request "Post" (js_encode q) hd);
+        quote <- (GMI.toJSVal q);
+        header <- js_setHeader (T.toJSString "content-type") (T.toJSString "application/json");
+        rq <- GMI.toJSVal (Request "POST" (DJS.unpack (js_encode quote)));
+        request <- setValIntoObject rq (DJS.pack "headers") header;
+        val <- myGetJSON' endpoint request;
         cb <- (asyncCallback1 $ \res -> do{
-                      (Just (q::Quote)) <- GMI.fromJSVal;
-                      r <- createRowFromQuote doc q;
+                      (Just (qt::Quote)) <- GMI.fromJSVal res;
+                      r <- createRowFromQuote doc qt;
                       addRowToTable doc r;
                       return();
           });
         _ <- js_then val cb;
         return();
       }
-    -- si dovrebbe scrivere l'handler che deve riuscire a chiamare la funzione di haskell
-    -- per riuscirci dobbiamo capire per bene come funziona la questione della call back
+      registerServiceWorker doc url = do{
+        sw <- liftIO $ getVal (T.toJSString "navigator") (T.toJSString "serviceWorker");
+        ctrl <- liftIO $ getVal' sw (T.toJSString "controller");
+        cb1 <- (asyncCallback1 $ \_ -> do{
+          state <- liftIO $ getVal' ctrl (T.toJSString "state");
+          (Just (st :: String)) <- GMI.fromJSVal state;
+          if ( st == "activated") then do {loadQuotations doc url; return();} else do{return();}
+          });
+        cb2 <- (asyncCallback1 $ \_ -> do{ ctrl1 <- liftIO $ getVal' sw (T.toJSString "controller");  
+                                            setFoo ctrl1 (T.toJSString "onstatechange") cb1;
+                                            return();});
+        if (TS.isNull ctrl) then do{  sw1 <- liftIO $ getVal (T.toJSString "navigator") (T.toJSString "serviceWorker");
+                                      setFoo sw1 (T.toJSString "oncontrollerchange") cb2;
+                                      callm1WithVal sw1 (T.toJSString "register") (T.toJSString "service-worker.js");
+                                      return();  }
+                            else do{ loadQuotations doc url;
+                                      callm1WithVal sw (T.toJSString "register") (T.toJSString "service-worker.js");
+                                      return();
+                          }
+      }
   in R.runWebGUI $ \webView -> do
        Just doc <- R.webViewGetDomDocument webView
        Just myForm <- gGetById FE.castToHTMLFormElement doc "add-form"
        deleteQuote <- asyncCallback1 $ \idNum -> setFunction idNum doc
        writeGlobalFunction (DJS.pack "myHandler") deleteQuote
-       liftIO $ loadQuotation doc endpoint
+       registerServiceWorker doc endpoint
        void $
          Ev.on myForm E.submit $ do
           Ev.preventDefault
           q <- getQuoteFromPage doc
           if (text q) == [] then return() 
-          else do {
-          addQuote doc q;
-       return (); }
+          else do 
+            liftIO $ addQuote doc q
+            return()
+
