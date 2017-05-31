@@ -84,7 +84,7 @@ foreign import javascript safe "$r = window[$1]($2)" invoke1 ::
                JSString -> TS.JSVal -> IO TS.JSVal
 
 foreign import javascript safe "$r = window[$1]($2,$3)" invoke2 ::
-               TS.JSString -> TS.JSVal -> TS.JSVal -> IO TS.JSVal
+               TS.JSString -> TS.JSVal -> O.Object -> IO TS.JSVal
 
 foreign import javascript unsafe "$r = $1[$2]()" callm1 ::
                 TS.JSVal -> TS.JSString -> IO TS.JSVal
@@ -102,12 +102,12 @@ fetch x = do
   myValue <- GMI.toJSVal x
   invoke1 (T.toJSString "fetch") myValue
 
-fetch' :: String -> TS.JSVal -> IO Promise 
+fetch' :: String -> O.Object -> IO Promise 
 fetch' x y = do
   myValue <- GMI.toJSVal x  
   invoke2 (T.toJSString "fetch") myValue y
 
-myGetJSON' :: String -> TS.JSVal -> IO Promise 
+myGetJSON' :: String -> O.Object -> IO Promise 
 myGetJSON' url y = do
   o <- fetch' url y 
   cb <- (syncCallback1' $ \r -> do
@@ -195,8 +195,8 @@ main =
       getQuoteFromPage d = do
         newQuote <- getTextValueWithId d "new-quote"
         author <- getTextValueWithId d "quote-author"
-        if author == [] then return $ Quote newQuote "Anonymous"
-        else return $ Quote newQuote author
+        if author == [] then return $ Quote newQuote "Anonymous" 0 False
+        else return $ Quote newQuote author 0 False
       createRowFromQuote d q = do
         Just e <- D.createElement d (Just "tr")
         E.setId e (show (id q))
@@ -227,39 +227,40 @@ main =
         _ <- js_then o cb 
         return();
       showQuotations d q = do
-      	Just e <- D.createElement d (Just "tr")
-      	E.setId e (show (id q))
-      	E.setInnerHTML e $ 
-      		Just $
-      		"<td>" ++ text q ++ "</td><td>" ++ "by " ++ author q ++ "</td>"
-      	return e 
+        Just e <- D.createElement d (Just "tr")
+        E.setId e (show (id q))
+        E.setInnerHTML e $ 
+          Just $
+          "<td>" ++ text q ++ "</td><td>" ++ "by " ++ author q ++ "</td>"
+        return e 
       loadQuotations d url = do {
-  		  val <- myGetJSON url;
- 		    cb <- (asyncCallback1 $ \res -> do 
-                	(Just (array :: [Quote])) <- GMI.fromJSVal res 
-                	mapM_ (\x -> do {
+        val <- myGetJSON url;
+        cb <- (asyncCallback1 $ \res -> do 
+                  (Just (array :: [Quote])) <- GMI.fromJSVal res 
+                  mapM_ (\x -> do {
                             row <- showQuotations d x; 
                             addRowToTable d row;
                             return ();
                   }) array
-                	return () );
-  		  _ <- js_then val cb ;
-  		  return(); }
+                  return () );
+        _ <- js_then val cb ;
+        return(); }
       addQuote doc q = do{
         quote <- GMI.toJSVal q;
         request <- O.create;
         post <- GMI.toJSVal "POST";
         O.setProp (T.toJSString "method") post request;
-        quotejson <- (GMI.toJSVal (js_encode q));
+        quotejson <- (GMI.toJSVal (js_encode quote));
         O.setProp (T.toJSString "body") quotejson request;
         header <- O.create;
         typeApp <- GMI.toJSVal "application/json";
         O.setProp (T.toJSString "content-type") typeApp header;
-        O.setProp (T.toJSString "headers") header request;
+        hd <- GMI.toJSVal header;
+        O.setProp (T.toJSString "headers") hd request;
         val <- myGetJSON' endpoint request;
         cb <- (asyncCallback1 $ \res -> do{
-                      (Just (q::Quote)) <- GMI.fromJSVal;
-                      r <- createRowFromQuote doc q;
+                      (Just (qt::Quote)) <- GMI.fromJSVal res;
+                      r <- createRowFromQuote doc qt;
                       addRowToTable doc r;
                       return();
           });
@@ -299,6 +300,6 @@ main =
           Ev.preventDefault
           q <- getQuoteFromPage doc
           if (text q) == [] then return() 
-          else do {
-          addQuote doc q;
-       return (); }
+          else do 
+            addQuote doc q
+            return()
