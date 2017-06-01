@@ -57,6 +57,8 @@ type Header = TS.JSVal
 type Promise = TS.JSVal
 
 -- Funzioni ausiliarie per leggere e scrivere un valore globale nel browser 
+foreign import javascript unsafe "this" js_this :: 
+               IO TS.JSVal           
 foreign import javascript unsafe "$1[$2]" getVal ::
                TS.JSString -> TS.JSString -> IO TS.JSVal
 foreign import javascript unsafe "$1[$2]" getVal' ::
@@ -264,11 +266,13 @@ main =
         sw <- liftIO $ getVal' nav (T.toJSString "serviceWorker");
         ctrl <- liftIO $ getVal' sw (T.toJSString "controller");
         cb1 <- (asyncCallback1 $ \_ -> do{
-          state <- liftIO $ getVal' ctrl (T.toJSString "state");
+          this <- liftIO $ js_this;
+          state <- liftIO $ getVal' this (T.toJSString "state"); 
           (Just (st :: String)) <- GMI.fromJSVal state;
           if ( st == "activated") then do {loadQuotations doc url; return();} else do{return();}
           });
-        cb2 <- (asyncCallback1 $ \_ -> do{ ctrl1 <- liftIO $ getVal' sw (T.toJSString "controller");  
+        cb2 <- (asyncCallback1 $ \_ -> do{  this1 <- liftIO $ js_this;
+                                            ctrl1 <- liftIO $ getVal' this1 (T.toJSString "controller");  
                                             setFoo ctrl1 (T.toJSString "onstatechange") cb1;
                                             return();});
         if (TS.isNull ctrl) then do{  nav <- liftIO $ readGlobal (T.toJSString "navigator");
