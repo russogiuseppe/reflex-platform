@@ -1,3 +1,4 @@
+
 {-# LANGUAGE DeriveAnyClass            #-}
 {-# LANGUAGE DeriveGeneric             #-}
 {-# LANGUAGE FlexibleContexts          #-}
@@ -259,7 +260,8 @@ main =
         return();
       }
       registerServiceWorker doc url = do{
-        sw <- liftIO $ getVal (T.toJSString "navigator") (T.toJSString "serviceWorker");
+        nav <- liftIO $ readGlobal (T.toJSString "navigator");
+        sw <- liftIO $ getVal' nav (T.toJSString "serviceWorker");
         ctrl <- liftIO $ getVal' sw (T.toJSString "controller");
         cb1 <- (asyncCallback1 $ \_ -> do{
           state <- liftIO $ getVal' ctrl (T.toJSString "state");
@@ -269,7 +271,8 @@ main =
         cb2 <- (asyncCallback1 $ \_ -> do{ ctrl1 <- liftIO $ getVal' sw (T.toJSString "controller");  
                                             setFoo ctrl1 (T.toJSString "onstatechange") cb1;
                                             return();});
-        if (TS.isNull ctrl) then do{  sw1 <- liftIO $ getVal (T.toJSString "navigator") (T.toJSString "serviceWorker");
+        if (TS.isNull ctrl) then do{  nav <- liftIO $ readGlobal (T.toJSString "navigator");
+                                      sw1 <- getVal' nav (T.toJSString "serviceWorker");
                                       setFoo sw1 (T.toJSString "oncontrollerchange") cb2;
                                       callm1WithVal sw1 (T.toJSString "register") (T.toJSString "service-worker.js");
                                       return();  }
