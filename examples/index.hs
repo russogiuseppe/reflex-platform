@@ -57,6 +57,10 @@ type Header = TS.JSVal
 type Promise = TS.JSVal
 
 -- Funzioni ausiliarie per leggere e scrivere un valore globale nel browser 
+foreign import javascript unsafe "$r = function(){$1}" registerCallback ::
+               Callback(TS.JSVal -> IO()) -> IO TS.JSVal 
+foreign import javascript unsafe "$r = function(){ return this[$1];}" js_this' ::
+               TS.JSString -> IO TS.JSVal 
 foreign import javascript unsafe "this" js_this :: 
                IO TS.JSVal           
 foreign import javascript unsafe "$1[$2]" getVal ::
@@ -64,11 +68,11 @@ foreign import javascript unsafe "$1[$2]" getVal ::
 foreign import javascript unsafe "$1[$2]" getVal' ::
                TS.JSVal -> TS.JSString -> IO TS.JSVal
 foreign import javascript unsafe "$1[$2] = $3" setVal ::
-               TS.JSVal -> TS.JSVal -> TS.JSVal -> IO () 
+               TS.JSVal -> TS.JSString -> TS.JSVal -> IO () 
 foreign import javascript unsafe "$1[$2] = $3" setFoo :: 
                TS.JSVal -> TS.JSString -> Callback (TS.JSVal -> IO () ) -> IO ()              
 foreign import javascript unsafe "$r = {$1 : $2}" js_setHeader ::
-               TS.JSString -> TS.JSString -> IO Header 
+               TS.JSString -> TS.JSVal -> IO Header 
 foreign import javascript unsafe "window[$1] = $2" writeGlobal ::
                TS.JSString -> TS.JSVal -> IO ()
 foreign import javascript unsafe "$r = function(){ $1[$2] = $3; return $1;}" setValIntoObject ::
@@ -197,7 +201,7 @@ main =
           Nothing  -> error "Invalid id specified"
       getQuoteFromPage d = do
         newQuote <- getTextValueWithId d "new-quote"
-        author <- getTextValueWithId d "quote-author"
+        author <- getTextValueWithId d "quote-author" 
         if author == [] then return $ Quote newQuote "Anonymous" 0 False
         else return $ Quote newQuote author 0 False
       createRowFromQuote d q = do
@@ -239,19 +243,21 @@ main =
  		    cb <- (asyncCallback1 $ \res -> do 
                 	(Just (array :: [Quote])) <- GMI.fromJSVal res 
                 	mapM_ (\x -> do {
+                            if (isSticky x == True) then do{ 
                             row <- showQuotations d x; 
                             addRowToTable d row;
-                            return ();
+                            return (); } else do { r <- createRowFromQuote d x; addRowToTable d r; return();}
                   }) array
                 	return () );
   		  _ <- js_then val cb ;
   		  return(); }
       addQuote doc q = do{
         quote <- (GMI.toJSVal q);
-        header <- js_setHeader (T.toJSString "content-type") (T.toJSString "application/json");
+        apjson <- GMI.toJSVal "application/json";
+        header <- js_setHeader (T.toJSString "content-type") apjson;
         rq <- GMI.toJSVal (Request "POST" (DJS.unpack (js_encode quote)));
-        request <- setValIntoObject rq (DJS.pack "headers") header;
-        val <- myGetJSON' endpoint request;
+        setVal rq (T.toJSString "headers") header;
+        val <- myGetJSON' endpoint rq;
         cb <- (asyncCallback1 $ \res -> do{
                       (Just (qt::Quote)) <- GMI.fromJSVal res;
                       r <- createRowFromQuote doc qt;
@@ -266,18 +272,29 @@ main =
         sw <- liftIO $ getVal' nav (T.toJSString "serviceWorker");
         ctrl <- liftIO $ getVal' sw (T.toJSString "controller");
         cb1 <- (asyncCallback1 $ \_ -> do{
+          --state <- js_this' (DJS.pack "state");
+          --nav1 <- liftIO $ readGlobal (T.toJSString "navigator");
+          --sw1 <- liftIO $ getVal' nav1 (T.toJSString "serviceWorker");
+          --ctrl' <- liftIO $ getVal' sw1 (T.toJSString "controller");
+          --state <- liftIO $ getVal' ctrl' (T.toJSString "state");
           this <- liftIO $ js_this;
           state <- liftIO $ getVal' this (T.toJSString "state"); 
           (Just (st :: String)) <- GMI.fromJSVal state;
           if ( st == "activated") then do {loadQuotations doc url; return();} else do{return();}
           });
-        cb2 <- (asyncCallback1 $ \_ -> do{  this1 <- liftIO $ js_this;
-                                            ctrl1 <- liftIO $ getVal' this1 (T.toJSString "controller");  
-                                            setFoo ctrl1 (T.toJSString "onstatechange") cb1;
+        cb2 <- (asyncCallback1 $ \_ -> do{  --ctrl1 <- js_this' (DJS.pack "controller");
+                                            --nav2 <- liftIO $ readGlobal (T.toJSString "navigator");
+                                            --sw2 <- liftIO $ getVal' nav2 (T.toJSString "serviceWorker");
+                                            --ctrl1 <- liftIO $ getVal' sw2 (T.toJSString "controller");
+                                            this1 <- liftIO $ js_this;
+                                            ctrl1 <- liftIO $ getVal' this1 (T.toJSString "controller"); 
+                                            clb1 <- liftIO $ registerCallback cb1; 
+                                            setVal ctrl1 (T.toJSString "onstatechange") clb1;
                                             return();});
         if (TS.isNull ctrl) then do{  nav <- liftIO $ readGlobal (T.toJSString "navigator");
                                       sw1 <- getVal' nav (T.toJSString "serviceWorker");
-                                      setFoo sw1 (T.toJSString "oncontrollerchange") cb2;
+                                      clb2 <- liftIO $ registerCallback cb2;
+                                      setVal sw1 (T.toJSString "oncontrollerchange") clb2;
                                       callm1WithVal sw1 (T.toJSString "register") (T.toJSString "service-worker.js");
                                       return();  }
                             else do{ loadQuotations doc url;
