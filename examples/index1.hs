@@ -273,40 +273,33 @@ main =
         sw <- liftIO $ getVal' nav (T.toJSString "serviceWorker");
         ctrl <- liftIO $ getVal' sw (T.toJSString "controller");
         cb1 <- (asyncCallback1 $ \_ -> do{
-          state <- js_this' (DJS.pack "state");
-          --nav1 <- liftIO $ readGlobal (T.toJSString "navigator");
-          --sw1 <- liftIO $ getVal' nav1 (T.toJSString "serviceWorker");
-          --ctrl' <- liftIO $ getVal' sw1 (T.toJSString "controller");
-          --state <- liftIO $ getVal' ctrl' (T.toJSString "state");
+          --state <- js_this' (DJS.pack "state");
+          nav1 <- liftIO $ readGlobal (T.toJSString "navigator");
+          sw1 <- liftIO $ getVal' nav1 (T.toJSString "serviceWorker");
+          ctrl' <- liftIO $ getVal' sw1 (T.toJSString "controller");
+          state <- liftIO $ getVal' ctrl' (T.toJSString "state");
           --this <- liftIO $ js_this;
           --state <- liftIO $ getVal' this (T.toJSString "state"); 
           (Just (st :: String)) <- GMI.fromJSVal state;
           if ( st == "activated") then do {loadQuotations doc url; return();} else do{return();}
           });
-        writeGlobalFunction (DJS.pack "setStateSW") cb1;
-        cb2 <- (asyncCallback1 $ \_ -> do{  ctrl1 <- js_this' (DJS.pack "controller");
-                                            --nav2 <- liftIO $ readGlobal (T.toJSString "navigator");
-                                            --sw2 <- liftIO $ getVal' nav2 (T.toJSString "serviceWorker");
-                                            --ctrl1 <- liftIO $ getVal' sw2 (T.toJSString "controller");
+        cb2 <- (asyncCallback1 $ \_ -> do{  --ctrl1 <- js_this' (DJS.pack "controller");
+                                            nav2 <- liftIO $ readGlobal (T.toJSString "navigator");
+                                            sw2 <- liftIO $ getVal' nav2 (T.toJSString "serviceWorker");
+                                            ctrl1 <- liftIO $ getVal' sw2 (T.toJSString "controller");
                                             --this1 <- liftIO $ js_this;
                                             --ctrl1 <- liftIO $ getVal' this1 (T.toJSString "controller"); 
-                                            clb1 <- liftIO $ registerCallback cb1; 
-                                            output1 <- liftIO $ invoke0 (DJS.pack "setStateSw");
-                                            setVal ctrl1 (T.toJSString "onstatechange") output1;
-                                            return();});
-        writeGlobalFunction (DJS.pack "registerSW") cb2; 
-        cb3 <- (asyncCallback1 $ \_ -> do{ nav <- liftIO $ readGlobal (T.toJSString "navigator");
-                                      sw1 <- getVal' nav (T.toJSString "serviceWorker");
-                                      output2 <- liftIO $ invoke0 (DJS.pack "registerSW"); 
-                                      setVal sw1 (T.toJSString "oncontrollerchange") output2;
-                                      callm1WithVal sw1 (T.toJSString "register") (T.toJSString "service-worker.js");
-                                      return();});
-        writeGlobalFunction (DJS.pack "registration") cb3;
-        if (TS.isNull ctrl) then do{  _ <- invoke0 (DJS.pack "registration");
-                                      return();  }
-                            else do{ loadQuotations doc url;
-                                      --callm1WithVal sw (T.toJSString "register") (T.toJSString "service-worker.js");
-                                      return();
+                                            --clb1 <- liftIO $ registerCallback cb1; 
+                                            --output1 <- liftIO $ invoke0 (DJS.pack "setStateSw");
+                                            setFoo ctrl1 (T.toJSString "onstatechange") cb1;
+                                            return();}); 
+        if (TS.isNull ctrl) then do{ 	nav' <- liftIO $ readGlobal (T.toJSString "navigator");
+        								sw' <- liftIO $ getVal' nav' (T.toJSString "serviceWorker");
+        								setFoo sw' (T.toJSString "oncontrollerchange") cb2;
+                                   	  	return();  }
+                            else do{ 	loadQuotations doc url;
+                                      	callm1WithVal sw (T.toJSString "register") (T.toJSString "service-worker.js");
+                                      	return();
                           }
       }
   in R.runWebGUI $ \webView -> do
@@ -315,6 +308,7 @@ main =
        deleteQuote <- asyncCallback1 $ \idNum -> setFunction idNum doc
        writeGlobalFunction (DJS.pack "myHandler") deleteQuote
        registerServiceWorker doc endpoint
+       --regSerW doc endpoint
        void $
          Ev.on myForm E.submit $ do
           Ev.preventDefault
@@ -323,4 +317,3 @@ main =
           else do 
             liftIO $ addQuote doc q
             return()
-
