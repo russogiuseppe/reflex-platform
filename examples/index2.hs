@@ -57,6 +57,8 @@ type Header = TS.JSVal
 type Promise = TS.JSVal
 
 -- Funzioni ausiliarie per leggere e scrivere un valore globale nel browser 
+foreign import javascript unsafe "$r = function(f){ return (function(){f(this);});}($1)" registerThis ::
+               Callback(TS.JSVal -> IO()) -> Callback(IO()) 
 foreign import javascript unsafe "$r = function(){$1}" registerCallback ::
                Callback(TS.JSVal -> IO()) -> IO TS.JSVal 
 foreign import javascript unsafe "$r = function(){ return this[$1];}" js_this' ::
@@ -70,7 +72,7 @@ foreign import javascript unsafe "$1[$2]" getVal' ::
 foreign import javascript unsafe "$1[$2] = $3" setVal ::
                TS.JSVal -> TS.JSString -> TS.JSVal -> IO () 
 foreign import javascript unsafe "$1[$2] = $3" setFoo :: 
-               TS.JSVal -> TS.JSString -> Callback (TS.JSVal -> IO () ) -> IO ()              
+               TS.JSVal -> TS.JSString -> Callback (IO () ) -> IO ()              
 foreign import javascript unsafe "$r = {$1 : $2}" js_setHeader ::
                TS.JSString -> TS.JSVal -> IO Header 
 foreign import javascript unsafe "window[$1] = $2" writeGlobal ::
@@ -271,33 +273,36 @@ main =
         nav <- liftIO $ readGlobal (T.toJSString "navigator");
         sw <- liftIO $ getVal' nav (T.toJSString "serviceWorker");
         ctrl <- liftIO $ getVal' sw (T.toJSString "controller");
-        cb1 <- (asyncCallback1 $ \_ -> do{
+        cb1 <- (asyncCallback1 $ \_this -> do{
           --state <- js_this' (DJS.pack "state");
-          nav1 <- liftIO $ readGlobal (T.toJSString "navigator");
-          sw1 <- liftIO $ getVal' nav1 (T.toJSString "serviceWorker");
-          ctrl' <- liftIO $ getVal' sw1 (T.toJSString "controller");
-          state <- liftIO $ getVal' ctrl' (T.toJSString "state");
+          --nav1 <- liftIO $ readGlobal (T.toJSString "navigator");
+          --sw1 <- liftIO $ getVal' nav1 (T.toJSString "serviceWorker");
+          --ctrl' <- liftIO $ getVal' sw1 (T.toJSString "controller");
+          --state <- liftIO $ getVal' ctrl' (T.toJSString "state");
           --this <- liftIO $ js_this;
           --state <- liftIO $ getVal' this (T.toJSString "state"); 
+          state <- liftIO $ getVal' _this (T.toJSString "state");
           (Just (st :: String)) <- GMI.fromJSVal state;
           liftIO $ putStrLn st;
           if ( st == "activated") then do {loadQuotations doc url; return();} else do{return();}
           });
-        cb2 <- (asyncCallback1 $ \_ -> do{  --ctrl1 <- js_this' (DJS.pack "controller");
-                                            nav2 <- liftIO $ readGlobal (T.toJSString "navigator");
-                                            sw2 <- liftIO $ getVal' nav2 (T.toJSString "serviceWorker");
-                                            ctrl1 <- liftIO $ getVal' sw2 (T.toJSString "controller");
+        cb2 <- (asyncCallback1 $ \_this1 -> do{  --ctrl1 <- js_this' (DJS.pack "controller");
+                                            --nav2 <- liftIO $ readGlobal (T.toJSString "navigator");
+                                            --sw2 <- liftIO $ getVal' nav2 (T.toJSString "serviceWorker");
+                                            --ctrl1 <- liftIO $ getVal' sw2 (T.toJSString "controller");
+                                            ctrl1 <- liftIO $ getVal' _this1 (T.toJSString "controller");
+                                            liftIO $ putStrLn "Pippo";
                                             --this1 <- liftIO $ js_this;
                                             --ctrl1 <- liftIO $ getVal' this1 (T.toJSString "controller"); 
                                             --clb1 <- liftIO $ registerCallback cb1; 
                                             --setVal ctrl1 (T.toJSString "onstatechange") cb1;
-                                            setFoo ctrl1 (T.toJSString "onstatechange") cb1;
+                                            setFoo ctrl1 (T.toJSString "onstatechange") (registerThis cb1);
                                             return();});
         if (TS.isNull ctrl) then do{  nav <- liftIO $ readGlobal (T.toJSString "navigator");
                                       sw1 <- getVal' nav (T.toJSString "serviceWorker");
                                       --clb2 <- liftIO $ registerCallback cb2;
                                       --setVal sw1 (T.toJSString "oncontrollerchange") cb2;
-                                      setFoo sw1 (T.toJSString "oncontrollerchange") cb2;
+                                      setFoo sw1 (T.toJSString "oncontrollerchange") (registerThis cb2);
                                       callm1WithVal sw1 (T.toJSString "register") (T.toJSString "service-worker.js");
                                       return();  }
                             else do{ loadQuotations doc url;
