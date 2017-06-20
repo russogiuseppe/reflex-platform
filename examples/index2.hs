@@ -57,7 +57,7 @@ type Header = TS.JSVal
 type Promise = TS.JSVal
 
 -- Funzioni ausiliarie per leggere e scrivere un valore globale nel browser 
-foreign import javascript unsafe "$r = function(f){ return (function(){f(this);});}($1)" registerThis ::
+foreign import javascript unsafe "$r = function(f){return (function(){f(this);});}($1)" registerThis ::
                Callback(TS.JSVal -> IO()) -> Callback(IO()) 
 foreign import javascript unsafe "$r = function(){$1}" registerCallback ::
                Callback(TS.JSVal -> IO()) -> IO TS.JSVal 
@@ -286,6 +286,7 @@ main =
           liftIO $ putStrLn st;
           if ( st == "activated") then do {loadQuotations doc url; return();} else do{return();}
           });
+        --cbState <- registerThis cb1;
         cb2 <- (asyncCallback1 $ \_this1 -> do{  --ctrl1 <- js_this' (DJS.pack "controller");
                                             --nav2 <- liftIO $ readGlobal (T.toJSString "navigator");
                                             --sw2 <- liftIO $ getVal' nav2 (T.toJSString "serviceWorker");
@@ -298,8 +299,9 @@ main =
                                             --setVal ctrl1 (T.toJSString "onstatechange") cb1;
                                             setFoo ctrl1 (T.toJSString "onstatechange") (registerThis cb1);
                                             return();});
-        if (TS.isNull ctrl) then do{  nav <- liftIO $ readGlobal (T.toJSString "navigator");
-                                      sw1 <- getVal' nav (T.toJSString "serviceWorker");
+        --cbController <- registerThis cb2;
+        if (TS.isNull ctrl) then do{  nav1 <- liftIO $ readGlobal (T.toJSString "navigator");
+                                      sw1 <- getVal' nav1 (T.toJSString "serviceWorker");
                                       --clb2 <- liftIO $ registerCallback cb2;
                                       --setVal sw1 (T.toJSString "oncontrollerchange") cb2;
                                       setFoo sw1 (T.toJSString "oncontrollerchange") (registerThis cb2);
