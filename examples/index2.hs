@@ -314,7 +314,7 @@ main =
                                       --setVal sw1 (T.toJSString "oncontrollerchange") cb2;
                                       setFoo sw1 (T.toJSString "oncontrollerchange") (registerThis cb2);
                                       callm1WithVal sw1 (T.toJSString "register") (T.toJSString "service-worker.js");
-                                      delay 1000;
+                                      delay 500;
                                       callOnStateChange;
                                       return();  }
                             else do{ loadQuotations doc url;
